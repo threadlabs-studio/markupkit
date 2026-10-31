@@ -33,7 +33,10 @@ export function stylesheetSources(components: readonly BrowserDefinition[]): Rea
   }
   for (const component of components) {
     if (component.styles.css === "") continue;
-    const id = normalizePath(fileURLToPath(component.definition.source.file)) + ".markupkit.css";
+    const url = new URL(component.definition.source.file);
+    // fileURLToPath drops the scope query; keep it in the stylesheet identity to prevent cross-scope overwrites.
+    const variant = url.search || url.hash ? "." + createHash("sha256").update(url.href).digest("hex").slice(0, 16) : "";
+    const id = normalizePath(fileURLToPath(url)) + variant + ".markupkit.css";
     sources.set(id, (sources.get(id) ?? "") + component.styles.css);
   }
   return sources;

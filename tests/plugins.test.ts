@@ -274,3 +274,105 @@ it("refreshes page-source cache identity and membership after development edits"
     expect(generations.size).toBeGreaterThanOrEqual(3);
   } finally { await server.close(); }
 }, 30_000);
+
+function scopedNotes(root: string, seen: { scope: string | undefined; file: string; pages: readonly PageSource[] }[] = []): MarkupKitPlugin {
+  const original = notes(root).pages!;
+  return { name: "scoped-notes", pages: { extensions: original.extensions, async compile(source, page) {
+    seen.push({ scope: page.scope, file: page.file, pages: page.pages });
+    const suffix = createHash("sha256").update(page.scope ?? "unscoped").digest("hex").slice(0, 8);
+    const compiled = await original.compile(source, page);
+    return compiled.replace(/page-note-[a-f0-9]{12}/g, tag => tag + "-" + suffix)
+      .replace("<article", `<article data-scope="${page.scope ?? "unscoped"}"`);
+  } } };
+}
+
+it("compiles a plugin source once per scope, resolving scoped links and original relative dependencies", async () => {
+  const root = await site(), seen: Parameters<typeof scopedNotes>[1] = [];
+  await write(root, "parts/card.html", '<template component="source-card"><span>Original component</span></template>');
+  const original = scopedNotes(root, seen);
+  const plugin: MarkupKitPlugin = { ...original, pages: { ...original.pages!, async compile(source, page) {
+    const resource = await original.pages!.compile(source, page);
+    return page.file.endsWith("02.install.note") ? '<link rel="component" href="../parts/card.html">' + resource.replace("Install body", "Install body <source-card></source-card>") : resource;
+  } } };
+  const options = { root, base: "/manual/", plugins: [plugin], pages: [
+    { dir: "docs", prefix: "/en/", scope: "en" },
+    { dir: "docs", prefix: "/fr/", scope: "fr", alias: true },
+    { dir: "docs", prefix: "/fr/v/current/", scope: "fr", alias: true },
+  ] };
+  const application = await createApplication(options);
+  try {
+    expect(seen.filter(page => page.file.endsWith("02.install.note")).map(page => page.scope).sort()).toEqual(["en", "fr"]);
+    const english = await application.render("/manual/en/install/"), french = await application.render("/manual/fr/install/");
+    expect(english.html).toContain('data-scope="en"'); expect(english.html).toContain('href="/manual/en/"');
+    expect(french.html).toContain('data-scope="fr"'); expect(french.html).toContain('href="/manual/fr/"');
+    expect(french.html).toContain("Original component");
+    expect(french.html).toMatch(/src="\/manual\/_markupkit\/files\/[a-f0-9]{16}-mark\.svg"/);
+    expect(french.html).toContain('rel="canonical" href="/manual/en/install/"');
+    const alias = await application.render("/manual/fr/v/current/start/");
+    expect(alias.html).toContain('data-scope="fr"'); expect(alias.html).toContain('href="/manual/fr/"');
+    expect(seen[0]!.pages).toEqual(expect.arrayContaining([{ file: join(root, "docs/02.install.note"), href: "/manual/fr/install/", aliasOf: "/manual/en/install/", scope: "fr" }]));
+    expect(new Set(seen.map(page => page.pages)).size).toBe(1);
+  } finally { await application.close(); }
+  const builtSite = await buildApplication(options);
+  const built = await readFile(join(builtSite.outDir, "fr/install/index.html"), "utf8");
+  expect(built).toContain('data-scope="fr"'); expect(built).toContain('href="/manual/fr/"'); expect(built).toContain("Original component");
+}, 30_000);
+
+it("selects mounted files before compilation and exposes only retained mounts to compilers", async () => {
+  const root = await site(), seen: Parameters<typeof scopedNotes>[1] = [], catalogs = new Set<readonly PageSource[]>();
+  await write(root, "docs/excluded.note", "not a component and must not compile");
+  const application = await createApplication({ root, plugins: [scopedNotes(root, seen)], pages: [
+    { dir: "docs", prefix: "/en/", scope: "en", include: async (file, pages) => {
+      catalogs.add(pages); expect(Object.isFrozen(pages)).toBe(true); expect(pages.every(Object.isFrozen)).toBe(true);
+      expect(pages.some(page => page.file.endsWith("excluded.note"))).toBe(true);
+      return !file.endsWith("excluded.note");
+    } },
+  ] });
+  try {
+    expect(catalogs.size).toBe(1);
+    expect(application.routes.some(route => route.pattern.includes("excluded"))).toBe(false);
+    expect(seen.every(page => !page.file.endsWith("excluded.note") && page.pages.every(source => !source.file.endsWith("excluded.note")))).toBe(true);
+  } finally { await application.close(); }
+});
+
+it("rejects selected aliases whose canonical owning file was excluded", async () => {
+  const root = await site();
+  await expect(createApplication({ root, plugins: [scopedNotes(root)], pages: [
+    { dir: "docs", prefix: "/en/", include: file => !file.endsWith("02.install.note") },
+    { dir: "docs", prefix: "/fr/", alias: true },
+  ] })).rejects.toThrow(/owning page.*\/en\/install\//);
+  // A different source at the same URL cannot inherit the excluded file's aliases.
+  await write(root, "replacement/02.install.note", "<article>Different source</article>");
+  await expect(createApplication({ root, plugins: [scopedNotes(root)], pages: [
+    { dir: "docs", prefix: "/en/", include: file => !file.endsWith("02.install.note") },
+    { dir: "replacement", prefix: "/en/" },
+    { dir: "docs", prefix: "/fr/", alias: true },
+  ] })).rejects.toThrow(/owning page.*\/en\/install\//);
+});
+
+it("rediscovers scoped source selection when an overriding page is added and removed", async () => {
+  const root = await site(), seen: Parameters<typeof scopedNotes>[1] = [];
+  await write(root, "translations/.keep", "");
+  const translated = join(root, "translations/02.install.note");
+  const server = await devApplication({ root, port: 0, plugins: [scopedNotes(root, seen)], pages: [
+    { dir: "docs", prefix: "/en/", scope: "en" },
+    { dir: "translations", prefix: "/fr/", scope: "fr" },
+    { dir: "docs", prefix: "/fr/", scope: "fr", alias: true,
+      include: (file, pages) => file !== join(root, "docs/02.install.note") || !pages.some(page => page.file === translated) },
+  ] });
+  try {
+    const content = async () => (await fetch(server.url + "fr/install/")).text();
+    expect(await content()).toContain('data-scope="fr"');
+    await write(root, "translations/02.install.note", "<article>French translation</article>");
+    await expect.poll(content, { timeout: 10_000 }).toContain("French translation");
+    await rm(translated);
+    await expect.poll(content, { timeout: 10_000 }).toContain("Install body");
+    expect(new Set(seen.map(page => page.pages)).size).toBeGreaterThanOrEqual(3);
+  } finally { await server.close(); }
+}, 30_000);
+
+it("preserves duplicate URL diagnostics when alias owners share a conflicting path", async () => {
+  const root = await site();
+  await write(root, "docs/02.index.note", "<article>Second home</article>");
+  await expect(createApplication({ root, plugins: [notes(root)] })).rejects.toThrow(/01\.index\.note.*02\.index\.note/s);
+});

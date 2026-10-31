@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+- Read canonical `component` identities during preparation and client navigation, with the legacy-root precedence defined by HTML Next. Qualify installed consumers against the current alpha.81 runtime while preserving the supported minimum.
+
+- Serve plugin pages in named directory scopes with separate compiled identities and links resolved inside each scope. Select mounted files before compilation through an asynchronous `include` callback and an immutable candidate source catalog. Keep relative imports and assets beside their original sources, preserve alias canonical ownership, and describe each scoped compilation independently.
+
 ## 0.4.3
 
 - Prepare library-owned component bindings that export the existing `connect`, `prepare` and `adopt` functions. Initial connection and rendered navigation retain matching server read identities, preserve caller values and avoid repeating accepted reads. Environment provider overrides require a raw `props` or `create` module.

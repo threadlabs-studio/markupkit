@@ -30,7 +30,7 @@ describe("standalone package contract", () => {
     mkdirSync(join(consumer, "app/components"), { recursive: true });
     writeFileSync(join(consumer, "package.json"), JSON.stringify({ name: "markupkit-consumer", private: true, type: "module" }));
     execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", pack()], { cwd: consumer, shell: useCommandShell });
-    writeFileSync(join(consumer, "markupkit.config.ts"), 'import { defineConfig, type MarkupKitPlugin, type PageSource } from "@threadlabs/markupkit"; const notes: MarkupKitPlugin = { name: "notes", pages: { extensions: [".note"], compile(_source, page) { const sources: readonly PageSource[] = page.pages; return `<template component="packed-note"><main>${sources.map(source => source.href).join(",")}</main></template>`; } } }; export default defineConfig({ base: "/packed/", plugins: [notes] });');
+    writeFileSync(join(consumer, "markupkit.config.ts"), 'import { defineConfig, type MarkupKitPlugin, type PageSource } from "@threadlabs/markupkit"; const notes: MarkupKitPlugin = { name: "notes", pages: { extensions: [".note"], compile(_source, page) { const sources: readonly PageSource[] = page.pages; return `<template component="packed-note-${page.scope ?? "base"}"><main data-scope="${page.scope ?? "base"}">${sources.map(source => source.href).join(",")}</main></template>`; } } }; export default defineConfig({ base: "/packed/", plugins: [notes], pages: [{ dir: "app/pages" }, { dir: "notes", prefix: "/en/", scope: "en", include: async file => !file.endsWith("private.note") }, { dir: "notes", prefix: "/fr/", scope: "fr", alias: true, include: file => !file.endsWith("private.note") }] });');
     writeFileSync(join(consumer, "app/layouts/default.html"), '<link rel="component" href="@threadlabs/markupkit/components/nav.html"><template component="packed-shell"><defs><prop name="navigation" type="list(object({ href: string, label: string, current: string, depth: number, pageName: string }))" required>Links</prop><title>Layout default</title></defs><main><mk-nav from:items="$navigation"></mk-nav><slot name="page"></slot></main></template>');
     writeFileSync(join(consumer, "app/layouts/default.server.ts"), 'export const load = async ({ navigation }) => ({ props: { navigation: await navigation() } });');
     writeFileSync(join(consumer, "app/pages/01.index.html"), '<meta name="mk:page" content="packed-page"><template component="packed-label"><strong>Packaged helper</strong></template><template component="packed-page"><defs><prop name="label" type="string" required>Label</prop><title>{$label}</title><link rel="alternate" hreflang="ar" href="https://docs.example/packed/"><link rel="alternate" hreflang="x-default" href="https://docs.example/packed/"></defs><section><h1 $value="$label"></h1><packed-label></packed-label></section></template>');
@@ -48,18 +48,23 @@ describe("standalone package contract", () => {
     const pagePath = join(consumer, "app/pages/01.index.html");
     writeFileSync(pagePath, '<link rel="component" href="../components/prepared.html">' + readFileSync(pagePath, "utf8").replace("<section>", "<section><packed-prepared></packed-prepared>"));
     writeFileSync(join(consumer, "app/pages/catalog.note"), "Catalog sources");
+    mkdirSync(join(consumer, "notes"));
+    writeFileSync(join(consumer, "notes/index.note"), "Scoped source");
+    writeFileSync(join(consumer, "notes/private.note"), "Excluded source");
     const installed = join(consumer, "node_modules/@threadlabs/markupkit");
     const output = runBin(consumer, "markupkit", ["build"]);
-    expect(output).toContain("Generated 2 pages");
+    expect(output).toContain("Generated 4 pages");
     const html = readFileSync(join(consumer, "dist/index.html"), "utf8");
     expect(html).toContain("Installed platform");
     expect(html).toContain(">Packed prepared value</p>");
     expect(html).toContain('hreflang="ar" href="https://docs.example/packed/"');
     expect(html).toContain('hreflang="x-default" href="https://docs.example/packed/"');
     expect(readFileSync(join(consumer, "dist/catalog/index.html"), "utf8")).toContain("/packed/catalog/");
+    expect(readFileSync(join(consumer, "dist/en/index.html"), "utf8")).toContain('data-scope="en"');
+    expect(readFileSync(join(consumer, "dist/fr/index.html"), "utf8")).toContain('data-scope="fr"');
     expect(html).toContain('<html lang="ar" dir="rtl">');
     expect(html).toContain(">Installed platform</title>");
-    expect(html).toContain('data-component="packed-shell"');
+    expect(html).toMatch(/<main\b[^>]*\s(?:component|data-component)="packed-shell"/);
     expect(html).toContain("Packaged helper");
     expect(html).toContain('aria-current="page"');
     expect(html).toContain('href="/packed/"');
@@ -76,7 +81,7 @@ describe("standalone package contract", () => {
     mkdirSync(join(consumer, "app/api"));
     writeFileSync(join(consumer, "app/api/time.server.ts"), 'export const GET = () => Response.json({ ok: true });');
     writeFileSync(join(consumer, "no-vite.mjs"), 'import { registerHooks } from "node:module"; registerHooks({ resolve(specifier, context, next) { if (/^vite(?:\\/|$)/.test(specifier)) throw new Error(`start loaded ${specifier}`); return next(specifier, context); } });');
-    expect(runBin(consumer, "markupkit", ["build"])).toContain("Generated 2 pages");
+    expect(runBin(consumer, "markupkit", ["build"])).toContain("Generated 4 pages");
     const start = spawn(process.execPath, ["--import", "./no-vite.mjs", join(installed, "dist/cli.js"), "start", "--port", "0"], { cwd: consumer });
     try {
       const url = await new Promise<string>((done, reject) => {

@@ -101,6 +101,10 @@ export interface PageDirectory {
    * left out of sitemap.xml, and name the same page under the other entry's prefix as canonical.
    */
   readonly alias?: boolean;
+  /** Compile plugin pages once per named scope; href() prefers sources mounted in that scope. */
+  readonly scope?: string;
+  /** Select files before compilation, using the immutable candidate static source mounts. */
+  readonly include?: (file: string, pages: readonly PageSource[]) => boolean | Promise<boolean>;
 }
 
 export interface MarkupKitPlugin {
@@ -195,6 +199,7 @@ export interface ManifestPage {
 
 /** A static source mount known before plugins compile page metadata. */
 export interface PageSource {
+  readonly scope?: string;
   readonly file: string;
   /** Deployment URL, including the application's base. */
   readonly href: string;
@@ -202,6 +207,8 @@ export interface PageSource {
   readonly aliasOf?: string;
 }
 export interface PageContext {
+  /** The mount's named compilation scope, absent for ordinary shared page compilation. */
+  readonly scope?: string;
   /**
    * Immutable static source mounts, shared by every compilation in this discovery. A new discovery
    * has a fresh array, including in development, so a WeakMap keyed by it can cache source metadata.
@@ -210,7 +217,7 @@ export interface PageContext {
   readonly pages: readonly PageSource[];
   /** The page's absolute source path. Diagnostics and relative references in its resource use it. */
   readonly file: string;
-  /** Deployment URL of the page compiled from another absolute source path, in the first directory that serves it. */
+  /** First deployment URL for a source in this scope, falling back to its first mount in the application. */
   href(target: string): string | undefined;
   /** Serve a file inside the application root that the page references, and return its deployment URL. */
   asset(file: string): string;
@@ -345,6 +352,7 @@ export interface RouteInput extends RouteLayer {
   readonly layouts?: readonly RouteLayer[];
 }
 export interface ApplicationRoute extends RouteLayer {
+  readonly scope?: string;
   /** The selected component tag, independent of the route pattern and source file. */
   readonly pageName: string;
   readonly pattern: string;

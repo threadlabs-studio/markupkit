@@ -11,7 +11,7 @@ import { createServer, isRunnableDevEnvironment, type ViteDevServer } from "vite
 import { MarkupKitError, rootAlias } from "./config.js";
 import { sitePolicy } from "./csp.js";
 import { authoredHead, documentHTML, redirectPage, type PageAssets } from "./document.js";
-import { breadth, discoverApplication, matchRoute, parameter, validSegment } from "./routes.js";
+import { breadth, compiledPageURL, discoverApplication, matchRoute, parameter, validSegment } from "./routes.js";
 import { applicationResource, pageDefinition, withoutSettings } from "./resource.js";
 import { createProviderModules } from "./providers.js";
 import { serverReaders } from "./private-readers.js";
@@ -150,11 +150,12 @@ export async function createApplicationInternals(input: ApplicationOptions = {},
   // a shared cache; HTML Next owns the DOM worker and declarative component semantics.
   const graph = async (route: ApplicationRoute): Promise<RouteGraph> => {
     const layers = [...route.layouts, route];
+    const layerURL = (layer: RouteLayer) => compiledPageURL(layer.component, layer === route ? route.scope : undefined, sources);
     const packages = new Map<string, ReturnType<typeof packageResource>>();
     const resources = new Map<string, ReturnType<typeof applicationResource>>();
-    const layerURLs = new Set(layers.map(layer => pathToFileURL(layer.component).href));
+    const layerURLs = new Set(layers.map(layerURL));
     const resolveCSS = server.config.createResolver({ extensions: [".css"], mainFields: ["style"], conditions: ["style", "development|production"], preferRelative: true, tryIndex: false });
-    const loaded = await loadNodeComponents(layers.map(layer => pathToFileURL(layer.component).href), {
+    const loaded = await loadNodeComponents(layers.map(layerURL), {
       readStylesheet: async url => ({ url, source: await readFile(fileURLToPath(url), "utf8") }),
       resolveStylesheet: async (specifier, parentURL) => {
         const resolved = await resolveCSS(specifier, fileURLToPath(parentURL));
@@ -166,7 +167,7 @@ export async function createApplicationInternals(input: ApplicationOptions = {},
       // reading each carrier, using Vite's ESM resolution from the consuming application.
       importMap: map,
       readComponent: async (url) => {
-        let source = sources.get(fileURLToPath(url)) ?? await readFile(fileURLToPath(url), "utf8");
+        let source = sources.get(url) ?? sources.get(fileURLToPath(url)) ?? await readFile(fileURLToPath(url), "utf8");
         for (const [tag, href] of builtins) if (new RegExp(`<${tag}[\\s/>]`).test(source)) source += `\n<link rel="component" href="${href}">`;
         const parsed = layerURLs.has(url) ? applicationResource(source, url) : parseComponentResource(source, url);
         if ("configuration" in parsed) resources.set(url, parsed);
@@ -186,8 +187,8 @@ export async function createApplicationInternals(input: ApplicationOptions = {},
       },
     });
     const definitions = layers.map(layer => {
-      if (layer === route) return pageDefinition(resources.get(pathToFileURL(layer.component).href)!, layer.component);
-      const roots = loaded.roots.filter(id => loaded.nodes.get(id)!.url === pathToFileURL(layer.component).href);
+      if (layer === route) return pageDefinition(resources.get(layerURL(layer))!, layer.component);
+      const roots = loaded.roots.filter(id => loaded.nodes.get(id)!.url === layerURL(layer));
       if (roots.length !== 1) throw new MarkupKitError("A page or layout must declare exactly one root component.", layer.component);
       return withoutSettings(loaded.nodes.get(roots[0]!)!.definition);
     });
@@ -273,7 +274,7 @@ export async function createApplicationInternals(input: ApplicationOptions = {},
     const seen = new Set<string>();
     const definitions: ComponentDefinition[] = [];
     for (const route of [...routes, ...notFoundRoute === undefined ? [] : [notFoundRoute], ...errorRoute === undefined ? [] : [errorRoute]]) {
-      const key = [...route.layouts, route].map(layer => layer.component).join("\0");
+      const key = [...route.layouts.map(layer => layer.component), compiledPageURL(route.component, route.scope, sources)].join("\0");
       if (seen.has(key)) continue;
       seen.add(key);
       definitions.push(...(await graph(route)).definitions);

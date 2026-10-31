@@ -611,3 +611,45 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("the development poli
     }, 60_000);
   }
 });
+
+for (const delivery of ["development", "built"] as const) {
+  it.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")(`${delivery} scoped plugin pages hydrate and navigate independently`, async () => {
+    const root = await mkdtemp(join(tmpdir(), "markupkit-scoped-browser-"));
+    let server: ApplicationServer | undefined;
+    const browser = await chromium.launch({ headless: true });
+    try {
+      await write(root, "docs/index.note", "Source");
+      await write(root, "docs/counter.ts", `if (typeof document === 'undefined') throw new Error('Browser controller ran during SSR');
+        export default function(host) { host.on('connect', () => { host.root.dataset.ready = 'yes'; });
+          host.on('click', event => { if (event.target instanceof Element && event.target.closest('button')) host.state.count += 1; }); }`);
+      const options = { root, base: "/manual/", layout: false as const, pages: [
+        { dir: "docs", prefix: "/en/", scope: "en" }, { dir: "docs", prefix: "/fr/", scope: "fr", alias: true },
+      ], plugins: [{ name: "scoped", pages: { extensions: [".note"], compile(_source: string, page: import("../dist/index.js").PageContext) {
+        return `<template component="scoped-${page.scope}" controller="./counter.js"><defs><state name="count" type="number" value="0"></state></defs>
+          <main><h1>${page.scope}</h1><button>Increment</button><output>{$count}</output><a href="${page.href(page.file)}">Self</a>
+          <a href="/manual/en/">English</a><a href="/manual/fr/">French</a></main>
+          <style>:host { color: ${page.scope === "en" ? "rgb(40, 50, 60)" : "rgb(60, 70, 80)"}; }</style></template>`;
+      } } }] };
+      server = delivery === "built" ? await startApplication({ outDir: (await buildApplication(options)).outDir, port: 0 }) : await devApplication({ ...options, port: 0 });
+      const page = await browser.newPage(), errors: string[] = [];
+      page.on("pageerror", error => errors.push(error.message));
+      await page.addInitScript(() => { Reflect.set(window, "documentToken", Math.random()); });
+      await page.goto(server.url + "en/");
+      await page.locator('[data-ready="yes"]').waitFor();
+      const token = await page.evaluate(() => Reflect.get(window, "documentToken"));
+      await expect.poll(() => page.locator("main").evaluate(element => getComputedStyle(element).color)).toBe("rgb(40, 50, 60)");
+      await page.getByRole("button", { name: "Increment" }).click();
+      await expect.poll(() => page.locator("output").textContent()).toBe("1");
+      await page.getByRole("link", { name: "French", exact: true }).click();
+      await expect.poll(() => page.locator("h1").textContent()).toBe("fr");
+      await page.locator('[data-ready="yes"]').waitFor();
+      expect(await page.locator("output").textContent()).toBe("0");
+      await expect.poll(() => page.locator("main").evaluate(element => getComputedStyle(element).color)).toBe("rgb(60, 70, 80)");
+      expect(await page.getByRole("link", { name: "Self" }).getAttribute("href")).toBe("/manual/fr/");
+      await page.getByRole("button", { name: "Increment" }).click();
+      await expect.poll(() => page.locator("output").textContent()).toBe("1");
+      expect(await page.evaluate(() => Reflect.get(window, "documentToken"))).toBe(token);
+      expect(errors).toEqual([]);
+    } finally { await browser.close(); await server?.close(); await rm(root, { recursive: true, force: true }); }
+  });
+}
