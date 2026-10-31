@@ -1,6 +1,6 @@
 {
   "name": "@threadlabs/markupkit",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Build applications with HTML, CSS, and JavaScript, powered by HTML Next.",
   "license": "MIT",
   "type": "module",
@@ -18,6 +18,10 @@
     "./description": {
       "types": "./dist/description.d.ts",
       "import": "./dist/description.js"
+    },
+    "./navigation": {
+      "types": "./dist/navigation.d.ts",
+      "import": "./dist/navigation.js"
     }
   },
   "files": [
@@ -41,9 +45,10 @@
     "test:package": "vitest run tests/package.test.ts",
     "test:browser": "pnpm build && vitest run --config vitest.browser.config.ts",
     "verify:inner": "pnpm lint && pnpm typecheck && pnpm test",
-    "verify:pr": "pnpm verify:inner && pnpm build && pnpm test:package && pnpm build:site",
+    "verify:pr": "pnpm verify:inner && pnpm build && pnpm test:package && pnpm build:site && pnpm test:system-ui",
     "verify:release": "pnpm verify:pr",
-    "build:site": "markupress build --root website"
+    "build:site": "markupress build --root website",
+    "test:system-ui": "pnpm --filter @threadlabs/system-ui build && pnpm --filter @threadlabs/system-ui test"
   },
   "dependencies": {
     "@nextwebwg/html-next": ">=1.0.0-alpha.87",

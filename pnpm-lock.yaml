@@ -207,6 +207,33 @@ importers:
         specifier: 5.1.0
         version: 5.1.0(@types/node@22.20.1)(jsdom@30.1.2)(vite@8.3.6(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
+  packages/system-ui:
+    devDependencies:
+      '@nextwebwg/html-next':
+        specifier: '>=1.0.0-alpha.87'
+        version: 1.0.0-alpha.91
+      '@threadlabs/looma':
+        specifier: '>=0.49.0'
+        version: 0.52.12
+      '@threadlabs/markupkit':
+        specifier: workspace:>=0.11.0
+        version: link:../..
+      '@types/node':
+        specifier: 22.20.1
+        version: 22.20.1
+      playwright:
+        specifier: 1.65.0
+        version: 1.65.0
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 5.1.0
+        version: 5.1.0(@types/node@22.20.1)(jsdom@30.1.2)(vite@8.3.6(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
 packages:
 
   '@asamuzakjp/css-color@7.1.7':

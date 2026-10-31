@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.0
+
+- Add the `@threadlabs/system-ui` package in `packages/system-ui`: shared editing and navigation models, HTML Next compositions over Looma, scoped web themes, and explicit Apple and Android presenter registrations. It publishes on the `alpha` tag.
+- Add `@threadlabs/markupkit/navigation` for page departure. A page's `mk:before-leave` listener can hold a client navigation in its precommit stage, with the URL and history unchanged, while it saves or asks the reader. A script's reload, which keeps the page, never asks.
+
 ## 0.10.0
 
 - Add `create-markupkit`: `npm create markupkit@latest my-app` creates an app with a layout, a page with a loader, a server-rendered form with validation, a JSON endpoint and page-wide styles. Its version matches MarkupKit's, and the app depends on that MarkupKit release.

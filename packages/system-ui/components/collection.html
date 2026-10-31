@@ -1,0 +1,33 @@
+<link rel="component" href="@threadlabs/looma/components/ui-stack/ui-stack.html">
+<link rel="component" href="@threadlabs/looma/components/ui-list/ui-list.html">
+<link rel="component" href="@threadlabs/looma/components/ui-list-item/ui-list-item.html">
+<link rel="component" href="@threadlabs/looma/components/ui-callout/ui-callout.html">
+<link rel="component" href="@threadlabs/looma/components/ui-spinner/ui-spinner.html">
+<template component="mk-collection">
+  <defs>
+    <prop name="view" type="object({ schema: string, id: string, label: string, status: string, message: string, appearance: object({ spacing: string, typography: string }), items: list(object({ key: string, href: string, label: string, summary: string, current: boolean })) })" required>A collectionView of provider results and the committed destination.</prop>
+  </defs>
+  <div>
+    <template $if="$view">
+      <template $match>
+      <nav $when="$view.schema = 'markupkit.collection.v1'" from:aria-label="$view.label" from:aria-busy="$view.status = 'pending'" from:data-collection="$view.id">
+        <ui-stack from:gap="{ system: 'm', compact: 's', comfortable: 'l' }[$view.appearance.spacing]">
+          <template slot="">
+          <p $if="$view.status = 'pending' or $view.status = 'empty'" role="status"><ui-spinner $if="$view.status = 'pending'" size="sm"></ui-spinner> {$view.message}</p>
+          <div $if="$view.status = 'error'" role="alert"><ui-callout tone="danger">{$view.message}</ui-callout></div>
+          <ui-list $if="$view.items.length > 0">
+            <ui-list-item $each="item of $view.items" $key="$item.key" from:current="$item.current" wrap>
+              <a from:href="$item.href" from:aria-current="$item.current ? 'page' : null" from:data-resource-key="$item.key"><span style:font-family="$view.appearance.typography = 'serif' ? 'ui-serif, Georgia, serif' : null">{$item.label}</span></a>
+              <span slot="description" style:font-family="$view.appearance.typography = 'serif' ? 'ui-serif, Georgia, serif' : null">{$item.summary}</span>
+            </ui-list-item>
+          </ui-list>
+          <slot name="recovery"></slot>
+          </template>
+        </ui-stack>
+      </nav>
+      <p $else role="alert">Unsupported System UI collection view.</p>
+      </template>
+    </template>
+    <p $if="not $view" role="status">This collection requires an application view.</p>
+  </div>
+</template>

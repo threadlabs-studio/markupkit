@@ -9,6 +9,8 @@
 import type { adoptRenderedProps, flushComponent, generatedHost, replaceProjectedNode } from "@nextwebwg/html-next/generated-runtime";
 import type { PageHead } from "./types.js";
 import type { BindingSnapshot } from "@nextwebwg/html-next/bindings";
+import { requestPageLeave } from "./page-leave.js";
+import type { PageLeaveApproval } from "./page-leave.js";
 import { componentNames } from "./component-identity.js";
 
 /** Consume only this component's read identities; the renderer adopts accepted values itself. */
@@ -313,7 +315,7 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
     return render(runtime, data);
   };
 
-  const visit = async (url: URL, event: NavigateEvent, form?: HTMLFormElement): Promise<void> => {
+  const prepareVisit = async (url: URL, event: NavigateEvent, form?: HTMLFormElement) => {
     const { signal } = event;
     // A script's reload renders the same page with its loaders' new data, keeping every layer, the page's
     // included, with its state, focus and scroll.
@@ -356,7 +358,7 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
         adopting.push(Promise.all(tags.map(tag => components.get(tag)?.[2]?.())));
       }
       const adopters = await Promise.all(adopting);
-      const commit = () => {
+      const commit = (onCommitted?: () => void) => {
         signal.throwIfAborted();
         committed = true;
         for (const element of owned) if (!kept.has(element)) element.remove();
@@ -386,21 +388,36 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
         }
         rendered = url.pathname + url.search;
         watch();
+        onCommitted?.();
       };
-      signal.throwIfAborted();
-      // The swap disconnects the old page and connects the new one, and HTML Next reconciles the head
-      // once in the microtasks after it, which a view transition's update includes.
-      if (reload || typeof document.startViewTransition !== "function" || !transitions(document.styleSheets)) commit();
-      else await document.startViewTransition(commit).updateCallbackDone;
-      if (reload) return;
-      const saved = event.navigationType === "traverse" ? positions.get(event.destination.key) : undefined;
-      if (saved === undefined) event.scroll(); else scrollTo(...saved);
-      // The next task, when the head holds the new page's title, announces it.
-      await new Promise(done => setTimeout(done));
-      announcer.textContent = document.title;
+      return {
+        cancel() { if (!committed) for (const sheet of sheets) sheet.remove(); },
+        async commit(onCommitted?: () => void) {
+          signal.throwIfAborted();
+          // The swap disconnects the old page and connects the new one, and HTML Next reconciles the head
+          // once in the microtasks after it, which a view transition's update includes. A page-leave
+          // commit runs inside the navigation's handler, after precommit, and swaps directly.
+          if (reload || onCommitted !== undefined || typeof document.startViewTransition !== "function" || !transitions(document.styleSheets)) commit(onCommitted);
+          else await document.startViewTransition(() => commit()).updateCallbackDone;
+          if (reload) return;
+          const saved = event.navigationType === "traverse" ? positions.get(event.destination.key) : undefined;
+          if (saved === undefined) event.scroll(); else scrollTo(...saved);
+          // The next task, when the head holds the new page's title, announces it.
+          await new Promise(done => setTimeout(done));
+          announcer.textContent = document.title;
+        },
+      };
     } catch (error) {
       if (!committed) for (const sheet of sheets) sheet.remove();
-      if (signal.aborted) return;
+      throw error;
+    }
+  };
+  const visit = async (url: URL, event: NavigateEvent, form?: HTMLFormElement): Promise<void> => {
+    let prepared: Awaited<ReturnType<typeof prepareVisit>> | undefined;
+    try { prepared = await prepareVisit(url, event, form); await prepared.commit(); }
+    catch (error) {
+      prepared?.cancel();
+      if (event.signal.aborted) return;
       // Anything this document cannot render in place loads as a document instead, in place of the
       // committed entry, so it starts at the top or its fragment as a document load does; a reload would
       // keep this page's scroll position. A submission's URL loads with GET, so a failed render never
@@ -429,6 +446,46 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
       !local(url, form ?? source) || event.destination.sameDocument && (event.navigationType !== "traverse" || url.pathname + url.search === rendered)) return;
     // After the swap, a new entry scrolls to its fragment or the top, back and forward return to
     // where the entry was left, and focus resets as after a document load.
+    let pageRoot = layer(document, 0);
+    for (let index = 1, next = layer(document, index); next !== null; next = layer(document, ++index)) pageRoot = next;
+    // Precommit is the native boundary that keeps the URL and history unchanged while an editor decides.
+    const approval = pageRoot === null || event.navigationType === "reload" ? undefined : requestPageLeave(pageRoot, url.href, event.signal,
+      event.cancelable && event.formData === null && typeof NavigationPrecommitController === "function");
+    if (approval === false) {
+      if (!event.destination.sameDocument) return;
+      // A non-cancelable same-document traversal cannot show beforeunload. Keep the URL and rendered
+      // layers coherent, and report the platform boundary rather than pretending it was guarded.
+      console.warn("MarkupKit cannot pause this non-cancelable same-document navigation.");
+    }
+    if (approval !== undefined && approval !== false) {
+      let accepted: PageLeaveApproval | undefined;
+      let prepared: Awaited<ReturnType<typeof prepareVisit>> | undefined;
+      const id = ++latest;
+      document.documentElement.setAttribute("data-mk-navigating", "");
+      let done = false;
+      const finish = (result: "committed" | "cancelled") => {
+        if (result === "cancelled") prepared?.cancel();
+        if (done) return;
+        done = true;
+        event.signal.removeEventListener("abort", abort);
+        try { accepted?.complete(result); }
+        finally { if (id === latest) document.documentElement.removeAttribute("data-mk-navigating"); }
+      };
+      const abort = () => { finish("cancelled"); };
+      event.signal.addEventListener("abort", abort, { once: true });
+      event.intercept({ scroll: "manual", async precommitHandler() {
+        try {
+          accepted = await approval;
+          if (done || !accepted.current()) throw new DOMException("Page departure cancelled", "AbortError");
+          prepared = await prepareVisit(url, event);
+          if (done || !accepted.current()) throw new DOMException("Page departure superseded", "AbortError");
+        } catch (error) { finish("cancelled"); throw error; }
+      }, async handler() {
+        try { await prepared!.commit(() => { finish("committed"); }); }
+        catch (error) { finish("cancelled"); throw error; }
+      } });
+      return;
+    }
     event.intercept({ scroll: "manual", focusReset: event.navigationType === "reload" ? "manual" : "after-transition", async handler() {
       const id = ++latest;
       document.documentElement.setAttribute("data-mk-navigating", "");
