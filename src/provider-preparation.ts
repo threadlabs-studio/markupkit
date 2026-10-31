@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { existsSync } from "node:fs";
 import { componentModule, type ComponentBindingModule } from "./component-module.js";
 import { readChannel } from "./read-channel.js";
+import { componentNames, componentRoots } from "./component-identity.js";
 
 const packaged = fileURLToPath(import.meta.resolve("@nextwebwg/html-next/bindings"));
 const source = packaged.replace(/[/\\]dist[/\\]bindings\.js$/, "/src/bindings.ts");
@@ -44,8 +45,8 @@ export async function prepare({ document, host, flush, signal, port, data: input
   try {
     for (;;) {
       let found = false;
-      for (const root of document.querySelectorAll("[data-component]")) {
-        for (const tag of root.getAttribute("data-component")!.split(/\s+/)) {
+      for (const root of document.querySelectorAll(componentRoots)) {
+        for (const tag of componentNames(root).split(/\s+/)) {
           const module = modules.get(tag);
           if (module === undefined) continue;
           const instance = host(root, tag);

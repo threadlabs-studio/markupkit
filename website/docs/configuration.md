@@ -156,6 +156,28 @@ export default defineConfig({
 A folder at two prefixes without `alias: true` on one of them is an error that names both, as is an
 alias entry without an entry for the folder itself.
 
+### Select and scope page sources
+
+A page directory's `include(file, pages)` callback selects files before compilation. `file` is the original absolute source path; `pages` is the shared, immutable catalog of candidate static source mounts. Return a boolean or a promise of one. It runs for ordinary pages, including parameterized page files, while the catalog contains static mounts. Error and not-found pages keep their existing discovery behavior. An alias that remains selected requires its owning page to remain selected too.
+
+Use a nonempty `scope` name when a page plugin generates different links or labels for several mounts of the same file:
+
+```ts
+export default defineConfig({
+  pages: [
+    { dir: 'notes', prefix: '/reference/', scope: 'reference' },
+    {
+      dir: 'notes', prefix: '/reader/', alias: true, scope: 'reader',
+      include: async file => !file.endsWith('/internal.note'),
+    },
+  ],
+});
+```
+
+Each plugin source compiles once per scope. `page.scope` names that scope, and `page.href(file)` prefers the source's first mount within it, falling back to the source's first application mount. The compiler must give each scoped page its own component name. Ordinary HTML resources retain their shared definition. `page.file`, relative component imports, controllers and assets keep their original source location. Directory aliases retain their owning canonical URL and sitemap policy.
+
+Selection receives the candidate catalog. Compilation receives the retained catalog, with an optional `scope` on each mount. Both catalogs have fresh identities on development rediscovery. Source edits and changes in the mounted folders rerun selection and compilation.
+
 ## Plugins
 
 A plugin can add a page format and adjust options. This one makes `.note` files into pages:
@@ -169,8 +191,8 @@ const notes: MarkupKitPlugin = {
   pages: {
     extensions: ['.note'],
     compile(source, page) {
-      // Each page needs its own valid component name; a hash of its path is both.
-      const name = createHash('sha256').update(page.file).digest('hex').slice(0, 12);
+      // Each file and compilation scope needs its own valid component name.
+      const name = createHash('sha256').update(JSON.stringify([page.file, page.scope])).digest('hex').slice(0, 12);
       return `<template component="note-${name}"><defs><title>Note</title></defs><article>${source}</article></template>`;
     },
   },
@@ -183,7 +205,8 @@ MarkupKit routes, orders, watches, renders, and builds `.note` files like `.html
 name the `.note` file. A compiled page is an HTML Next component, so its head content and `mk:`
 settings go in its `<defs>`. While compiling, a plugin can call:
 
-- `page.pages` for immutable static source mounts, each with `file`, `href`, and an optional `aliasOf` for an alias directory;
+- `page.pages` for immutable retained static source mounts, each with `file`, `href`, and optional `aliasOf` and `scope` values;
+- `page.scope` for the directory's optional compilation scope;
 - `page.href(file)` for another page's URL;
 - `page.asset(file)` to serve a file the page references, such as an image, and get its URL;
 - `page.watch(file)` for a file the page's output depends on, such as a metadata file beside it.

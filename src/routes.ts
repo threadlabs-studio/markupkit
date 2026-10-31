@@ -5,7 +5,16 @@ import { basename, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { configure, withPlugins, MarkupKitError, pluginLayouts, within, type PluginOptions } from "./config.js";
 import { applicationResource, pageDefinition } from "./resource.js";
-import type { ApplicationOptions, ApplicationRoute, EndpointRoute, MarkupKitPlugin, PageSource, RouteGroup, RouteInput, RouteLayer } from "./types.js";
+import type { ApplicationOptions, ApplicationRoute, EndpointRoute, MarkupKitPlugin, PageDirectory, PageSource, RouteGroup, RouteInput, RouteLayer } from "./types.js";
+
+/** A query distinguishes compiled carriers while relative imports still resolve beside the original file. */
+function scopedSourceURL(file: string, scope: string): string {
+  const url = pathToFileURL(file); url.searchParams.set("mk-scope", scope); return url.href;
+}
+export function compiledPageURL(file: string, scope: string | undefined, sources: ReadonlyMap<string, string>): string {
+  const scoped = scope === undefined ? undefined : scopedSourceURL(file, scope);
+  return scoped !== undefined && sources.has(scoped) ? scoped : pathToFileURL(file).href;
+}
 
 /** The name of a [name], [...name] catch-all, or [[...name]] optional catch-all segment. */
 export function parameter(segment: string): string | undefined {
@@ -67,7 +76,8 @@ export async function discover(root: string, options: DiscoveryOptions) {
   // folderLayouts are the _layout.html files from the page directory down to the page, outermost first.
   const routes: (Omit<ApplicationRoute, "pageName"> & { readonly prefix: string; readonly directoryLayout?: string | false | RouteLayer;
     readonly folderLayouts: readonly RouteLayer[]; readonly notFound?: true; readonly error?: true; readonly index?: true })[] = [];
-  const add = (input: RouteInput & { readonly canonical?: string; readonly aliasOf?: string; readonly notFound?: true; readonly error?: true; readonly index?: true }, prefix: string, order?: readonly (string | null)[],
+  const selections = new Map<(typeof routes)[number], NonNullable<PageDirectory["include"]>>();
+  const add = (input: RouteInput & { readonly scope?: string; readonly canonical?: string; readonly aliasOf?: string; readonly notFound?: true; readonly error?: true; readonly index?: true }, prefix: string, order?: readonly (string | null)[],
     directoryLayout?: string | false | RouteLayer, folderLayouts: readonly RouteLayer[] = [], groups: readonly RouteGroup[] = []): void => {
     if (!/^\/(?:[^/]+\/)*$/.test(input.pattern)) throw new MarkupKitError("Route patterns require leading and trailing slashes.", input.component);
     const segments = input.pattern.slice(1, -1).split("/").filter(Boolean);
@@ -81,6 +91,7 @@ export async function discover(root: string, options: DiscoveryOptions) {
     const absolute = (layer: RouteLayer): RouteLayer => ({ component: resolve(root, layer.component),
       ...(layer.server === undefined ? {} : { server: typeof layer.server === "string" ? resolve(root, layer.server) : layer.server }) });
     routes.push({ ...absolute(input), pattern: input.pattern, segments, params, layouts: (input.layouts ?? []).map(absolute), prefix, folderLayouts,
+      ...(input.scope === undefined ? {} : { scope: input.scope }),
       ...(directoryLayout === undefined ? {} : { directoryLayout }), ...(groups.length === 0 ? {} : { groups }),
       ...(order === undefined ? {} : { order }), ...(input.canonical === undefined ? {} : { canonical: input.canonical }),
       ...(input.aliasOf === undefined ? {} : { aliasOf: input.aliasOf }),
@@ -154,7 +165,9 @@ export async function discover(root: string, options: DiscoveryOptions) {
       }
       own.set(resolve(root, dir), prefix);
     }
-    for (const { dir, prefix = "/", layout, optional, alias } of directories) {
+    for (const { dir, prefix = "/", layout, optional, alias, scope, include } of directories) {
+      if (scope !== undefined && (typeof scope !== "string" || scope.length === 0)) throw new MarkupKitError("Page scope must be a nonempty string.", dir);
+      if (include !== undefined && typeof include !== "function") throw new MarkupKitError("Page include must be a function.", dir);
       if (!/^\/(?:[A-Za-z0-9_-]+\/)*$/.test(prefix)) throw new MarkupKitError("Page directory prefixes need leading and trailing slashes around URL slugs.", dir);
       const directory = resolve(root, dir);
       if (!within(root, directory)) throw new MarkupKitError("Page directories must be inside the application root.", directory);
@@ -168,7 +181,12 @@ export async function discover(root: string, options: DiscoveryOptions) {
       if (alias === true && primary === undefined) throw new MarkupKitError(`The alias page directory ${dir} at ${prefix} needs an entry that serves ${dir} itself.`, directory);
       const first = routes.length;
       if (present) await visit(directory, prefix, segments, segments.map(() => null), layout, [], []);
-      if (alias === true) for (let i = first; i < routes.length; i++) routes[i] = { ...routes[i]!, aliasOf: primary + routes[i]!.pattern.slice(prefix.length) };
+      for (let i = first; i < routes.length; i++) {
+        const route = routes[i]!;
+        routes[i] = { ...route, ...(scope === undefined ? {} : { scope }),
+          ...(alias === true ? { aliasOf: primary + route.pattern.slice(prefix.length) } : {}) };
+        if (include !== undefined && !route.notFound && !route.error) selections.set(routes[i]!, include);
+      }
     }
   }
   for (const route of options.routes ?? []) add(route, "/");
@@ -182,25 +200,48 @@ export async function discover(root: string, options: DiscoveryOptions) {
   }
 
   // A plugin page links to another page's first static URL, and serves the files it references.
-  const pages: readonly PageSource[] = Object.freeze(routes.filter(route => route.params.length === 0 && !route.notFound && !route.error)
+  const sourceCatalog = (): readonly PageSource[] => Object.freeze(routes.filter(route => route.params.length === 0 && !route.notFound && !route.error)
     .map(route => Object.freeze({ file: route.component, href: base + route.pattern.slice(1),
+      ...(route.scope === undefined ? {} : { scope: route.scope }),
       ...(route.aliasOf === undefined ? {} : { aliasOf: base + route.aliasOf.slice(1) }) })));
+  const candidates = sourceCatalog(), excluded = new Set<(typeof routes)[number]>();
+  for (const [route, include] of selections) {
+    const keep = await include(route.component, candidates);
+    if (typeof keep !== "boolean") throw new MarkupKitError("Page include must return a boolean.", route.component);
+    if (!keep) excluded.add(route);
+  }
+  for (let i = routes.length - 1; i >= 0; i--) if (excluded.has(routes[i]!)) routes.splice(i, 1);
+  const owningPaths = new Map(routes.filter(route => route.aliasOf === undefined).map(route => [route.pattern, route.component]));
+  for (const route of routes) if (route.aliasOf !== undefined && owningPaths.get(route.aliasOf) !== route.component) {
+    throw new MarkupKitError(`Alias requires an owning page at ${route.aliasOf}.`, route.component);
+  }
+  const pages = sourceCatalog();
   const pageURLs = new Map<string, string>();
-  for (const page of pages) if (!pageURLs.has(page.file)) pageURLs.set(page.file, page.href);
+  const scopedURLs = new Map<string, Map<string, string>>();
+  for (const page of pages) {
+    if (!pageURLs.has(page.file)) pageURLs.set(page.file, page.href);
+    if (page.scope !== undefined) {
+      const urls = scopedURLs.get(page.scope) ?? new Map<string, string>();
+      if (!urls.has(page.file)) urls.set(page.file, page.href);
+      scopedURLs.set(page.scope, urls);
+    }
+  }
   const realRoot = await realpath(root);
   const sources = new Map<string, string>();
   const files = new Map<string, string>();
   const resources = new Map<string, { readonly source: string; readonly resource: ReturnType<typeof applicationResource> }>();
-  const resourceOf = async (component: string) => {
-    const identity = await realpath(component);
+  const resourceOf = async (component: string, scope?: string) => {
+    const file = await realpath(component);
+    const compiler = compilers.get(pageExtension(component) ?? ".html");
+    const scoped = compiler !== undefined && scope !== undefined;
+    const identity = scoped ? scopedSourceURL(file, scope) : file;
     const retained = resources.get(identity);
     if (retained !== undefined) return { identity, ...retained };
     // Read declarations only. Route discovery never executes loaders or controllers.
-    let text = await readFile(identity, "utf8");
-    const compiler = compilers.get(pageExtension(component) ?? ".html");
+    let text = await readFile(file, "utf8");
     if (compiler !== undefined) {
-      text = await compiler.compile(text, { file: component, watch, pages,
-        href: target => pageURLs.get(resolve(target)),
+      text = await compiler.compile(text, { file: component, watch, pages, ...(scope === undefined ? {} : { scope }),
+        href: target => (scope === undefined ? undefined : scopedURLs.get(scope)?.get(resolve(target))) ?? pageURLs.get(resolve(target)),
         asset(file) {
           const absolute = resolve(file);
           let real: string;
@@ -215,9 +256,9 @@ export async function discover(root: string, options: DiscoveryOptions) {
           files.set(name, real);
           return base + name.split("/").map(encodeURIComponent).join("/");
         } });
-      sources.set(component, text);
+      sources.set(scoped ? scopedSourceURL(component, scope) : component, text);
     }
-    const resource = applicationResource(text, pathToFileURL(identity).href);
+    const resource = applicationResource(text, scoped ? identity : pathToFileURL(file).href);
     const snapshot = { source: text, resource };
     resources.set(identity, snapshot);
     return { identity, ...snapshot };
@@ -227,7 +268,7 @@ export async function discover(root: string, options: DiscoveryOptions) {
   const redirects: { readonly from: string; readonly to: string; readonly component: string }[] = [];
   for (const route of routes) {
     if (route.canonical !== undefined || route.notFound || route.error) continue;
-    const { resource } = await resourceOf(route.component);
+    const { resource } = await resourceOf(route.component, route.scope);
     const metadata = resource.components.get(pageDefinition(resource, route.component).contract.tag)!;
     for (const from of metadata.redirectsFrom) {
       if (!/^\/(?:[^/]+\/)*$/.test(from) || !from.slice(1, -1).split("/").filter(Boolean).every(validSegment)) {
@@ -238,7 +279,7 @@ export async function discover(root: string, options: DiscoveryOptions) {
     }
     for (const alias of metadata.aliases) {
       if (!/^\/(?:[^/]+\/)*$/.test(alias)) throw new MarkupKitError("mk:alias needs a route path with leading and trailing slashes.", route.component);
-      add({ component: route.component, ...(route.server === undefined ? {} : { server: route.server }), layouts: route.layouts,
+      add({ component: route.component, ...(route.scope === undefined ? {} : { scope: route.scope }), ...(route.server === undefined ? {} : { server: route.server }), layouts: route.layouts,
         pattern: route.prefix + alias.slice(1), canonical: route.pattern, ...(route.aliasOf === undefined ? {} : { aliasOf: route.aliasOf }) }, route.prefix, undefined, route.directoryLayout, route.folderLayouts);
     }
   }
@@ -276,7 +317,7 @@ export async function discover(root: string, options: DiscoveryOptions) {
     return plugins !== undefined && Object.hasOwn(plugins, name) ? plugins[name] : undefined;
   };
   for (const { prefix: _prefix, directoryLayout, folderLayouts, notFound: isNotFound, error: isError, index, ...route } of routes) {
-    const { identity, resource } = await resourceOf(route.component);
+    const { identity, resource } = await resourceOf(route.component, route.scope);
     const pageName = pageDefinition(resource, route.component).contract.tag;
     const previous = pageNames.get(pageName);
     if (previous !== undefined && previous.identity !== identity) {

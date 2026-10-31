@@ -9,6 +9,7 @@
 import type { adoptRenderedProps, flushComponent, generatedHost, replaceProjectedNode } from "@nextwebwg/html-next/generated-runtime";
 import type { PageHead } from "./types.js";
 import type { BindingSnapshot } from "@nextwebwg/html-next/bindings";
+import { componentNames } from "./component-identity.js";
 
 /** Consume only this component's read identities; the renderer adopts accepted values itself. */
 export function preparedBinding(root: Element, tag: string): BindingSnapshot | undefined {
@@ -70,7 +71,7 @@ const documentLoad = Symbol("MarkupKit document load");
 function adopt(root: ParentNode): void {
   for (const element of [...root instanceof Element ? [root] : [], ...root.querySelectorAll("[data-html-next-instance]")]) {
     if (!element.hasAttribute("data-html-next-instance")) continue;
-    const component = components.get(element.getAttribute("data-component")!.split(" ")[0]!);
+    const component = components.get(componentNames(element).split(" ")[0]!);
     if (component === undefined) element.removeAttribute("data-html-next-instance");
     else component[0]({}, undefined, element);
   }
@@ -335,8 +336,8 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
       const modules = [...next.head.querySelectorAll('script[type="module"][src]')].map(script => import(/* @vite-ignore */ new URL(script.getAttribute("src")!, url).href));
       await Promise.all([...loading, ...modules]);
       const adopting = [];
-      for (let index = 0; index < layers.length - 1 && layer(document, index)?.getAttribute("data-component") === layers[index]!.getAttribute("data-component"); index += 1) {
-        const tags = layer(document, index)!.getAttribute("data-component")!.split(/\s+/);
+      for (let index = 0; index < layers.length - 1 && layer(document, index) !== null && componentNames(layer(document, index)!) === componentNames(layers[index]!); index += 1) {
+        const tags = componentNames(layer(document, index)!).split(/\s+/);
         adopting.push(Promise.all(tags.map(tag => components.get(tag)?.[2]?.())));
       }
       const adopters = await Promise.all(adopting);
@@ -352,7 +353,7 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
         // Layouts persist while each depth renders the same component: they keep their DOM, state,
         // and controllers, and take the new rendering's props. The page layer is always replaced.
         let index = 0;
-        while (index < layers.length - 1 && layer(document, index)?.getAttribute("data-component") === layers[index]!.getAttribute("data-component")) {
+        while (index < layers.length - 1 && layer(document, index) !== null && componentNames(layer(document, index)!) === componentNames(layers[index]!)) {
           const update = () => runtime.adoptRenderedProps(layer(document, index)!, layers[index]!);
           for (const [at, adoptPrepared] of adopters[index]!.entries()) {
             const applyCaller = at === 0 ? update : () => {};

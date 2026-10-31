@@ -17,6 +17,22 @@ async function fixture() {
 }
 
 describe("application descriptions for independent build targets", () => {
+  it("describes each scoped compilation without compiling an extra unscoped copy", async () => {
+    const root = await fixture(), compiled: (string | undefined)[] = [];
+    await mkdir(join(root, "docs"));
+    await writeFile(join(root, "docs/index.note"), "Scoped note");
+    await writeFile(join(root, "docs/plain.html"), '<template component="plain-page"><p>Shared HTML</p></template>');
+    const app = await describeApplication({ root, pages: [
+      { dir: "docs", prefix: "/en/", scope: "en" }, { dir: "docs", prefix: "/fr/", scope: "fr", alias: true },
+    ], plugins: [{ name: "notes", pages: { extensions: [".note"], compile(source, page) {
+      compiled.push(page.scope);
+      return `<template component="note-${page.scope}"><p>${source}</p></template>`;
+    } } }] });
+    expect(compiled.sort()).toEqual(["en", "fr"]);
+    expect(app.sources.filter(source => source.file.endsWith("index.note")).map(source => [source.scope, source.tag]).sort()).toEqual([["en", "note-en"], ["fr", "note-fr"]]);
+    expect(app.sources.filter(source => source.file.endsWith("plain.html"))).toHaveLength(1);
+    expect(app.routes.find(route => route.pattern === "/fr/")).toMatchObject({ scope: "fr", pageName: "note-fr", aliasOf: "/en/" });
+  });
   it("describes explicit page/layout modules and server capabilities without executing either", async () => {
     const root = await fixture();
     await writeFile(join(root, "app/pages/index.html"), '<template component="home-page" controller="./home.ts"><defs><meta name="mk:alias" content="/start/"></defs><main>Home</main></template>');

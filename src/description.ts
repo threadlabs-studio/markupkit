@@ -1,4 +1,4 @@
-import { discoverApplication } from "./routes.js";
+import { compiledPageURL, discoverApplication } from "./routes.js";
 import { pageDefinition } from "./resource.js";
 import type { ApplicationOptions, ApplicationRoute, EndpointRoute, RouteLayer } from "./types.js";
 
@@ -13,6 +13,8 @@ export interface ApplicationDescriptionRoute extends Omit<ApplicationRoute, "ser
 }
 export interface ApplicationDescriptionSource {
   readonly file: string;
+  /** Present for a plugin page compiled in a named source scope. */
+  readonly scope?: string;
   /** HTML Next source after an explicitly configured page compiler, before presentation lowering. */
   readonly source: string;
   readonly tag: string;
@@ -49,14 +51,19 @@ function route({ layouts, ...value }: ApplicationRoute): ApplicationDescriptionR
 export async function describeApplication(input: ApplicationOptions = {}): Promise<ApplicationDescription> {
   const { config, discovery, server, redirects } = await discoverApplication(input);
   const all = [...discovery.routes, ...discovery.notFound === undefined ? [] : [discovery.notFound], ...discovery.error === undefined ? [] : [discovery.error]];
-  const paths = [...new Set(all.flatMap(route => [...route.layouts.map(layer => layer.component), route.component]))];
+  const paths = new Map<string, { file: string; scope?: string }>();
+  for (const page of all) for (const value of [...page.layouts, page]) {
+    const scope = value === page ? page.scope : undefined;
+    const url = compiledPageURL(value.component, scope, discovery.sources);
+    paths.set(url, { file: value.component, ...(scope !== undefined && new URL(url).search !== "" ? { scope } : {}) });
+  }
   return { version: 1, root: config.root, base: config.base, routes: discovery.routes.map(route),
     ...discovery.notFound === undefined ? {} : { notFound: route(discovery.notFound) },
     ...discovery.error === undefined ? {} : { error: route(discovery.error) },
-    sources: await Promise.all(paths.map(async file => {
-      const snapshot = await discovery.resourceOf(file);
+    sources: await Promise.all([...paths.values()].map(async ({ file, scope }) => {
+      const snapshot = await discovery.resourceOf(file, scope);
       const definition = pageDefinition(snapshot.resource, file);
-      return { file, source: snapshot.source, tag: definition.contract.tag,
+      return { file, ...(scope === undefined ? {} : { scope }), source: snapshot.source, tag: definition.contract.tag,
         ...definition.module === undefined ? {} : { module: definition.module } };
     })), assets: Object.fromEntries(discovery.files), ...server, redirects: Object.fromEntries(redirects) };
 }
