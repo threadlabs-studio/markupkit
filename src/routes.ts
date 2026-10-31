@@ -211,8 +211,11 @@ export async function discover(root: string, options: DiscoveryOptions) {
     if (!keep) excluded.add(route);
   }
   for (let i = routes.length - 1; i >= 0; i--) if (excluded.has(routes[i]!)) routes.splice(i, 1);
-  const owningPaths = new Map(routes.filter(route => route.aliasOf === undefined).map(route => [route.pattern, route.component]));
-  for (const route of routes) if (route.aliasOf !== undefined && owningPaths.get(route.aliasOf) !== route.component) {
+  const owningPaths = new Map<string, Set<string>>();
+  for (const route of routes) if (route.aliasOf === undefined) {
+    const files = owningPaths.get(route.pattern) ?? new Set<string>(); files.add(route.component); owningPaths.set(route.pattern, files);
+  }
+  for (const route of routes) if (route.aliasOf !== undefined && !owningPaths.get(route.aliasOf)?.has(route.component)) {
     throw new MarkupKitError(`Alias requires an owning page at ${route.aliasOf}.`, route.component);
   }
   const pages = sourceCatalog();

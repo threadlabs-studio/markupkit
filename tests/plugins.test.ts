@@ -370,3 +370,9 @@ it("rediscovers scoped source selection when an overriding page is added and rem
     expect(new Set(seen.map(page => page.pages)).size).toBeGreaterThanOrEqual(3);
   } finally { await server.close(); }
 }, 30_000);
+
+it("preserves duplicate URL diagnostics when alias owners share a conflicting path", async () => {
+  const root = await site();
+  await write(root, "docs/02.index.note", "<article>Second home</article>");
+  await expect(createApplication({ root, plugins: [notes(root)] })).rejects.toThrow(/01\.index\.note.*02\.index\.note/s);
+});
