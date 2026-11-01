@@ -75,7 +75,7 @@
     "markupkit": "./dist/cli.js"
   },
   "packageManager": "pnpm@12.9.1",
-  "homepage": "https://threadlabs-studio.github.io/markupkit/",
+  "homepage": "https://threadlabs.studio/markupkit/",
   "bugs": {
     "url": "https://github.com/threadlabs-studio/markupkit/issues"
   }

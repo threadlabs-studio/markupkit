@@ -37,7 +37,7 @@ Use Node `>=22.22.2 <23 || >=24.15 <25`. Install `@threadlabs/markupkit` and add
 
 Then run `pnpm dev`, `pnpm build`, `pnpm preview`, or `pnpm start` (`npm run dev` and the others work too).
 
-**Guide:** [MarkupKit](https://threadlabs-studio.github.io/markupkit/) covers pages and routing,
+**Guide:** [MarkupKit](https://threadlabs.studio/markupkit/) covers pages and routing,
 loading data, endpoints and middleware, navigation, moving between pages, deployment, and
 configuration. Its source is
 [`website/docs`](./website/docs/) in this repository, built with Markupress.

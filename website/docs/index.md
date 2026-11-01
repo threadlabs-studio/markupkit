@@ -30,4 +30,4 @@ MarkupKit uses [HTML Next](https://nextwebwg.org/html-next/), the implementation
 
 ## From Threadlabs, alongside Markupress.
 
-[Markupress](https://threadlabs-studio.github.io/markupress/) builds documentation on MarkupKit. It powers this site, too. MarkupKit handles the application; Markupress handles Markdown, navigation, and documentation versions.
+[Markupress](https://threadlabs.studio/markupress/) builds documentation on MarkupKit. It powers this site, too. MarkupKit handles the application; Markupress handles Markdown, navigation, and documentation versions.
