@@ -245,8 +245,8 @@ it("excludes mounted subtrees from flat navigation, trees, breadcrumbs and pager
   const application = await createApplication({ root, base: "/manual/" });
   const exclude = ["/v/", "/fr/"];
   try {
-    expect((await application.navigation({ exclude })).map(item => item.href)).not.toEqual(expect.arrayContaining(["/manual/v/1.2.3/guide/", "/manual/fr/guide/"]));
-    expect((await application.navigationTree({ exclude })).map(item => item.label)).not.toEqual(expect.arrayContaining(["v", "fr"]));
+    expect((await application.navigation({ exclude })).filter(item => item.href.startsWith("/manual/v/") || item.href.startsWith("/manual/fr/"))).toEqual([]);
+    expect((await application.navigationTree({ exclude })).filter(item => ["v", "fr"].includes(item.label))).toEqual([]);
     const rendered = await application.render("/manual/about/");
     const query = JSON.parse(rendered.layers.at(-1)!.props!.query as string);
     expect(query.pager).toEqual({ previous: expect.objectContaining({ href: "/manual/api/" }) });
