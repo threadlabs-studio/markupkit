@@ -52,9 +52,11 @@ function componentId(definition: ComponentDefinition): string {
  * A page's browser modules: each component compiled to direct DOM code that also adopts its
  * server-rendered root, and the page's entry, `entry`, which registers them with client.ts. A page
  * ships only the generated-runtime helpers its components use; controllers and declared reads are
- * imported by the components that own them, and the page's stylesheets by its entry.
+ * imported by the components that own them, and the page's stylesheets by its entry. `hot`, for the
+ * development server, compiles components whose changed modules replace their definitions, and
+ * an entry that client.ts can import again.
  */
-export function browserSources(components: readonly BrowserDefinition[], options: ClientOptions, entry: string, css: readonly string[] = []): ReadonlyMap<string, string> {
+export function browserSources(components: readonly BrowserDefinition[], options: ClientOptions, entry: string, css: readonly string[] = [], hot = false): ReadonlyMap<string, string> {
   const { base } = options;
   const sources = new Map<string, string>();
   const invocations = new Map(components.map(({ definition }) => [definition.contract.tag, { module: componentId(definition), definition }]));
@@ -121,7 +123,7 @@ export async function adoption() {
     const definition = { ...component.definition, ...declarations === undefined ? {} : { declarations },
       ...component.controller === undefined ? {} : { controller: component.controller },
       ...moduleId === undefined ? {} : { module: moduleId } };
-    let module = generateComponent(definition, { invocations, hydrate: true })
+    let module = generateComponent(definition, { invocations, hydrate: true, hot })
       .find((artifact) => artifact.path === `vanilla/${definition.contract.name}.js`)!.content
       .replace('"@nextwebwg/html-next/generated-runtime"', JSON.stringify(runtime))
       // The page's entry imports its stylesheets: one for the page's graph, or one per source file.
@@ -142,10 +144,17 @@ ${[...stylesheetSources(components).keys()].map(id => `import ${JSON.stringify(i
 ${components.map(({ definition }, index) => `import { create${definition.contract.name} as c${index} } from ${JSON.stringify(componentId(definition))};`).join("\n")}
 ${components.flatMap(({ definition, binding }, index) => binding === undefined ? [] : [`
 const b${index} = () => import(${JSON.stringify(componentId(definition) + ".module.js")}).then(module => module.adoption());`]).join("\n")}
-page({ ${functions} }, ${JSON.stringify(options)}, { ${registered.join(", ")} });
+page({ ${functions} }, ${JSON.stringify(options)}, { ${registered.join(", ")} }${hot ? ", import.meta.url" : ""});
 `);
   return sources;
 }
+
+/**
+ * The development module that updates a page in place (client.ts's `changed`): it accepts its own
+ * update, which the server sends for every source change, and passes the revision it was served at.
+ */
+export const hotModule = (revision: number): string =>
+  `import { changed } from ${JSON.stringify(client)};\nimport.meta.hot.accept(() => changed(${revision}));\n`;
 
 export function browserPlugin(sources: ReadonlyMap<string, string>, inputs?: Set<string>): Plugin {
   return {

@@ -214,7 +214,11 @@ settings go in its `<defs>`. While compiling, a plugin can call:
 Every compilation within one discovery receives the same `page.pages` array. Each new discovery gets a fresh array, including after a development edit, so a `WeakMap` keyed by it can cache metadata read from those sources. The catalog is available before the first page compiles. Its URLs include the application's base; `aliasOf` points to the owning mount's URL. It lists source mounts, including pages hidden from navigation, rather than parameterized routes, error pages, or aliases and redirects declared in page metadata.
 
 `markupkit dev` watches the project root, and also each file a plugin passes to `page.watch`, inside the
-root or outside it. When one changes, it recompiles the pages and reloads open pages:
+root or outside it. When one changes, it recompiles the pages, and each open page updates in place.
+A changed component or page definition replaces the one in the browser: each of its instances
+renders again with its props and slotted content, and it and every component it renders keep each
+state the new definitions still declare. Scroll and every other component stay as they were, and the page's layers take their new props. A
+change to a controller or other browser module, or to which layouts a page uses, reloads the page:
 
 ```ts
 compile(source, page) {
@@ -598,7 +602,7 @@ markupkit <command> [root] [options]
 ::: table
 
 - Command: `markupkit dev`
-  Does: Serves the application with live reload, rendering every page, endpoint, and middleware on request.
+  Does: Serves the application with in-place updates, rendering every page, endpoint, and middleware on request.
 
 - Command: `markupkit build`
   Does: Prerenders pages and writes them, the browser bundles, and the request server to `dist/`.

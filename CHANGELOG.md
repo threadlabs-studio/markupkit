@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0
+
+- `markupkit dev` updates open pages in place when a component, page, layout definition, Markdown or data file changes. Each changed component module is imported again and replaces its definition. Every instance re-renders with its props and slotted content, and it and every component it renders keep each state the new definitions still declare. Layers take their new props and changed stylesheets load again, with scroll and every other component unchanged. A change to a controller or another browser module, or to which layouts a page uses, reloads the page.
+- Require HTML Next 1.0.0-alpha.82, whose `replaceComponent` development output these updates use. The range records that API requirement.
+
 ## 0.6.0
 
 - Navigation queries accept `exclude` to omit mounted subtrees consistently from flat lists, trees, breadcrumbs and previous/next links.

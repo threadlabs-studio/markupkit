@@ -44,7 +44,7 @@ Create your first page:
 </template>
 ```
 
-Run `npm run dev` and open the URL it prints. Edit the page and the browser reloads.
+Run `npm run dev` and open the URL it prints. Edit the page and it updates in place, keeping its scroll position and component state.
 
 ## A project at a glance
 

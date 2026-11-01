@@ -59,6 +59,14 @@ interface Payload {
 
 const components = new Map<string, Component>();
 let started = false;
+/** In development, the page modules this document imported, which a source change imports again. */
+const entries = new Set<string>();
+/** The runtime and options the first page module gave, for a development update. */
+let client: readonly [Runtime, ClientOptions] | undefined;
+/** Set while a development update imports a page module again: its changed components replace this document's. */
+let replacing = false;
+/** In development, the server's revision this document's modules were last updated to. */
+let applied: number | undefined;
 /** A page that defines a tag differently from this document. Only a document of its own can show it. */
 class Conflict extends Error {}
 /** Marks the document navigation a page that cannot render in place gets, which MarkupKit leaves native. */
@@ -77,16 +85,18 @@ function adopt(root: ParentNode): void {
   }
 }
 
-/** Each page module calls this once, when it is first imported. */
-export function page(runtime: Runtime, options: ClientOptions, pageComponents: Readonly<Record<string, Component>>): void {
-  // A document keeps one component per tag, as HTML Next's registry does (HR001). A page that
-  // redefines a tag fails here, when navigation imports its module, before anything renders, and loads as a document instead.
+/** Each page module calls this once, when it is first imported. In development it names itself, `entry`. */
+export function page(runtime: Runtime, options: ClientOptions, pageComponents: Readonly<Record<string, Component>>, entry?: string): void {
+  if (entry !== undefined) entries.add(entry);
+  // A document keeps one component per tag. A page that redefines a tag fails here, when navigation
+  // imports its module, before anything renders, and loads as a document instead.
   for (const [tag, component] of Object.entries(pageComponents)) {
-    if ((components.get(tag)?.[0] ?? component[0]) !== component[0]) throw new Conflict(`MarkupKit: <${tag}> already has another definition in this document.`);
+    if (!replacing && (components.get(tag)?.[0] ?? component[0]) !== component[0]) throw new Conflict(`MarkupKit: <${tag}> already has another definition in this document.`);
   }
   for (const [tag, component] of Object.entries(pageComponents)) components.set(tag, component);
   if (started) return;
   started = true;
+  client = [runtime, options];
   adopt(document);
   // ponytail: links stay document navigations without NavigateEvent.sourceElement (Chrome 135, Firefox 147,
   // Safari 26.2), which carries the per-link opt-outs; earlier Navigation API versions would skip them.
@@ -94,6 +104,7 @@ export function page(runtime: Runtime, options: ClientOptions, pageComponents: R
   document.dispatchEvent(new Event("mk:ready"));
 }
 
+const payloadURL = (base: string, url: URL) => `${base}_markupkit/pages/${url.pathname.slice(base.length)}payload.json${url.search}`;
 const layer = (root: Document, index: number) => root.querySelector(`[data-mk-layer="${index}"]`) ?? root.getElementById(`mk-layer-${index}`);
 const fresh = (time: number) => performance.now() - time < 30_000;
 const loaded = async (url: string, signal?: AbortSignal): Promise<Response> => {
@@ -190,7 +201,6 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
    */
   const local = (url: URL, source: Element | null) => url.origin === location.origin && url.pathname.startsWith(base) &&
     url.pathname.endsWith("/") && !source?.closest("[data-mk-reload]") && !source?.hasAttribute("download");
-  const payloadURL = (url: URL) => `${base}_markupkit/pages/${url.pathname.slice(base.length)}payload.json${url.search}`;
 
   // Prefetching never runs anything: payloads are data, and modules and stylesheets are only hinted.
   const hinted = new Set<string>();
@@ -203,7 +213,7 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
     document.head.append(link);
   };
   const prefetched = new Map<string, { readonly time: number; readonly payload: Promise<Payload> }>();
-  const payloadOf = (url: URL, signal?: AbortSignal) => loaded(payloadURL(url), signal).then(response => response.json() as Promise<Payload>);
+  const payloadOf = (url: URL, signal?: AbortSignal) => loaded(payloadURL(base, url), signal).then(response => response.json() as Promise<Payload>);
   /** The page an HTML link would visit in place, if any. An unparsable href is not a page. */
   const target = (anchor: Element) => {
     const url = anchor instanceof HTMLAnchorElement ? URL.parse(anchor.href) : null;
@@ -428,6 +438,65 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
   // ponytail: an entry a script pushed before MarkupKit started looks the same as one traversed to, and
   // renders its URL's page too. MarkupKit leaves later pushes alone.
   if (rendered !== location.pathname + location.search) void navigation.navigate(location.href, { history: "replace" });
+}
+
+/**
+ * In development, after a source changes, updates the current page in place. The payload response
+ * names each browser module whose source changed since `since`, the revision this document last
+ * applied. A changed component module is imported anew, and its evaluation replaces the component's
+ * definition: HTML Next re-renders every instance of it, which keeps its slotted content, and its
+ * state and that of every component it renders.
+ * A changed stylesheet is imported and linked anew, and every layer takes the new rendering's props,
+ * as a kept layout does on navigation. Scroll and every other component's state stay as they were.
+ * Any other change, or a page whose layers changed, loads the page again.
+ */
+export async function changed(since: number): Promise<void> {
+  if (client === undefined) return;
+  const [runtime, { base }] = client;
+  try {
+    const response = await fetch(payloadURL(base, new URL(location.href)), { cache: "no-store", headers: { "x-markupkit-revision": String(applied ?? since) } });
+    if (!response.ok) throw new Error(`MarkupKit cannot load this page's payload (${response.status}).`);
+    const data = await response.json() as Payload;
+    const fresh = (url: string) => `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+    const urls = (JSON.parse(response.headers.get("x-markupkit-changed") ?? "[]") as string[]).map(url => new URL(url, location.href).href);
+    const scripts = urls.filter(url => /\/component\/[^/]+(?<!\.module)\.js$/.test(url));
+    const styles = urls.filter(url => url.endsWith(".css"));
+    const entry = urls.find(url => entries.has(url));
+    if (urls.some(url => !scripts.includes(url) && !styles.includes(url) && url !== entry)) throw new Error("MarkupKit loads this page again: a module it cannot replace changed.");
+    const replaced = await Promise.all(scripts.map(url => import(/* @vite-ignore */ fresh(url)) as Promise<Record<string, unknown>>));
+    // A changed graph adds its components; each changed component's own module then gives its new factory.
+    replacing = true;
+    try { if (entry !== undefined) await import(/* @vite-ignore */ fresh(entry)); }
+    finally { replacing = false; }
+    for (const [index, url] of scripts.entries()) {
+      const tag = /\/component\/([^/]+)-[0-9a-f]+\.js$/.exec(url)![1]!;
+      const factory = Object.entries(replaced[index]!).find(([name]) => name.startsWith("create"))?.[1] as Component[0] | undefined;
+      const component = components.get(tag);
+      if (factory !== undefined && component !== undefined) components.set(tag, [factory, ...component.slice(1)] as unknown as Component);
+    }
+    await Promise.all(styles.map(url => import(/* @vite-ignore */ fresh(url))));
+    // A linked stylesheet replaces its old copy once it has loaded, so the page never paints unstyled.
+    for (const link of document.head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')) {
+      if (!styles.includes(link.href.replace(/[?&]t=\d+$/, ""))) continue;
+      const next = link.cloneNode() as HTMLLinkElement;
+      next.href = fresh(link.href.replace(/[?&]t=\d+$/, ""));
+      next.addEventListener("load", () => link.remove());
+      next.addEventListener("error", () => next.remove());
+      link.after(next);
+    }
+    const { layers } = await render(runtime, data);
+    if (layer(document, layers.length) !== null || layers.some((root, index) => layer(document, index) === null || componentNames(layer(document, index)!) !== componentNames(root))) {
+      throw new Error("MarkupKit loads this page again: its layers changed.");
+    }
+    for (const [index, root] of layers.entries()) {
+      runtime.adoptRenderedProps(layer(document, index)!, root);
+      runtime.flushComponent(layer(document, index)!);
+    }
+    applied = Number(response.headers.get("x-markupkit-revision") ?? since);
+  } catch (error) {
+    console.warn(error);
+    location.reload();
+  }
 }
 
 /** Authors animate navigation with @view-transition { navigation: auto }, as for document navigation. */
