@@ -235,3 +235,22 @@ it("names the removed routeOrdering option and exports every built-in component"
     expect(require.resolve(`@threadlabs/markupkit/components/${file}`).replaceAll("\\", "/")).toMatch(new RegExp(`/components/${file}$`));
   }
 });
+
+it("excludes mounted subtrees from flat navigation, trees, breadcrumbs and pager links", async () => {
+  const root = await site();
+  await write(root, "app/pages/v/1.2.3/guide.html", '<template component="old-guide"><h1>Old guide</h1></template>');
+  await write(root, "app/pages/fr/guide.html", '<template component="french-guide"><h1>French guide</h1></template>');
+  await write(root, "app/pages/about.html", '<template component="page-about"><defs><prop name="query" type="string" required>Navigation query result</prop></defs><pre>{$query}</pre></template>');
+  await write(root, "app/pages/about.server.ts", 'export const load = async ({ pager, breadcrumbs }) => ({ props: { query: JSON.stringify({ pager: await pager({ exclude: ["/v/", "/fr/"] }), crumbs: await breadcrumbs({ exclude: ["/about/"] }) }) } });');
+  const application = await createApplication({ root, base: "/manual/" });
+  const exclude = ["/v/", "/fr/"];
+  try {
+    expect((await application.navigation({ exclude })).map(item => item.href)).not.toEqual(expect.arrayContaining(["/manual/v/1.2.3/guide/", "/manual/fr/guide/"]));
+    expect((await application.navigationTree({ exclude })).map(item => item.label)).not.toEqual(expect.arrayContaining(["v", "fr"]));
+    const rendered = await application.render("/manual/about/");
+    const query = JSON.parse(rendered.layers.at(-1)!.props!.query as string);
+    expect(query.pager).toEqual({ previous: expect.objectContaining({ href: "/manual/api/" }) });
+    expect(query.crumbs).toEqual([expect.objectContaining({ href: "/manual/" })]);
+    await expect(application.navigation({ exclude: ["v"] })).rejects.toThrow("Navigation from");
+  } finally { await application.close(); }
+});

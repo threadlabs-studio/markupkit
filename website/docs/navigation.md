@@ -273,3 +273,5 @@ moves only between the pages under it.
 
 Dynamic pages appear once per value their loader's `entries()` lists. Outside loaders,
 `application.navigation({ from, current })` returns the same list.
+
+Pass `exclude: ["/v/", "/fr/"]` with a navigation query to omit application-relative subtrees from flat navigation, navigation trees, breadcrumbs and previous/next links. Prefixes need leading and trailing slashes; they do not include the deployment base.

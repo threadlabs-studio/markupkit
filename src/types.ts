@@ -388,6 +388,8 @@ export interface RouteGroup {
 export interface NavigationQuery {
   /** Application-relative subtree, e.g. /guide/. Defaults to /. */
   readonly from?: string;
+  /** Application-relative subtrees omitted from navigation, breadcrumbs and pager links. */
+  readonly exclude?: readonly string[];
   /** Deployment pathname used for aria-current. Loaders default to their current URL. */
   readonly current?: string;
 }

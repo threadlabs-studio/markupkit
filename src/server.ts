@@ -53,8 +53,9 @@ export function createNavigation(base: string, routes: readonly NavigationRoute[
     const from = checkedFrom(query.from);
     const prefix = base + from.slice(1);
     const depth = from.split("/").filter(Boolean).length;
+    const excluded = (query.exclude ?? []).map(path => base + checkedFrom(path).slice(1));
     // Hidden pages and alias routes stay routable but out of navigation.
-    const items = [...await concrete()].filter(([path, route]) => path.startsWith(prefix) && !route.hidden && route.canonical === undefined);
+    const items = [...await concrete()].filter(([path, route]) => path.startsWith(prefix) && !excluded.some(prefix => path.startsWith(prefix)) && !route.hidden && route.canonical === undefined);
     const paths = new Map(items.map(([href, route]) => [href, treePath(href, route)]));
     items.sort(([a], [b]) => {
       const aParts = paths.get(a)!;
@@ -80,6 +81,7 @@ export function createNavigation(base: string, routes: readonly NavigationRoute[
     const from = checkedFrom(query.from);
     const current = query.current;
     if (current === undefined || !current.startsWith(base + from.slice(1))) return Object.freeze([]);
+    const excluded = (query.exclude ?? []).map(path => base + checkedFrom(path).slice(1));
     const paths = await concrete();
     const parts = current.slice(base.length).split("/").filter(Boolean);
     const start = from.split("/").filter(Boolean).length;
@@ -88,7 +90,7 @@ export function createNavigation(base: string, routes: readonly NavigationRoute[
       const href = base + parts.slice(0, i).map(part => part + "/").join("");
       // The page being rendered exists even when no entries() lists it, as for a dynamic page at request time.
       const route = paths.get(href) ?? (i === parts.length ? matchRoute(routes, href, base)?.route : undefined);
-      if (route !== undefined && route.canonical === undefined) trail.push(item(href, route, i - start, current));
+      if (route !== undefined && route.canonical === undefined && !excluded.some(prefix => href.startsWith(prefix))) trail.push(item(href, route, i - start, current));
     }
     return Object.freeze(trail);
   };
