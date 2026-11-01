@@ -29,6 +29,7 @@ export function breadth(segment: string | undefined): number {
 export function validSegment(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value !== "." && value !== ".." && !value.includes("/") && !/[\\\0?#]/.test(value);
 }
+const routeSlug = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
 export const redirectStatuses: readonly number[] = [301, 302, 303, 307, 308];
 /** A redirect's Location: an application path, under base, or an absolute http(s) URL. */
 export function redirectLocation(base: string, to: unknown, source: string): string {
@@ -82,7 +83,7 @@ export async function discover(root: string, options: DiscoveryOptions) {
     if (!/^\/(?:[^/]+\/)*$/.test(input.pattern)) throw new MarkupKitError("Route patterns require leading and trailing slashes.", input.component);
     const segments = input.pattern.slice(1, -1).split("/").filter(Boolean);
     if (segments[0] === "_markupkit") throw new MarkupKitError("_markupkit is reserved for generated assets.", input.component);
-    if (segments.some(segment => parameter(segment) === undefined && !/^[A-Za-z0-9_-]+$/.test(segment))) {
+    if (segments.some(segment => parameter(segment) === undefined && !routeSlug.test(segment))) {
       throw new MarkupKitError("Route segments must be URL slugs or [named] parameters.", input.component);
     }
     if (segments.slice(0, -1).some(segment => breadth(segment) > 1)) throw new MarkupKitError("A [...catch-all] parameter must be the last route segment.", input.component);
@@ -147,7 +148,7 @@ export async function discover(root: string, options: DiscoveryOptions) {
         await visit(join(directory, file.name), prefix, segments, order, directoryLayout, folderLayouts, [...groups, { label, order: rank, depth: segments.length }]);
         continue;
       }
-      if (parameter(slug) === undefined && !/^[A-Za-z0-9_-]+$/.test(slug)) {
+      if (parameter(slug) === undefined && !routeSlug.test(slug)) {
         throw new MarkupKitError("Route directories must be URL slugs, [named] parameters, or (groups).", join(directory, file.name));
       }
       await visit(join(directory, file.name), prefix, [...segments, slug], [...order, rank], directoryLayout, folderLayouts, groups);
@@ -168,7 +169,7 @@ export async function discover(root: string, options: DiscoveryOptions) {
     for (const { dir, prefix = "/", layout, optional, alias, scope, include } of directories) {
       if (scope !== undefined && (typeof scope !== "string" || scope.length === 0)) throw new MarkupKitError("Page scope must be a nonempty string.", dir);
       if (include !== undefined && typeof include !== "function") throw new MarkupKitError("Page include must be a function.", dir);
-      if (!/^\/(?:[A-Za-z0-9_-]+\/)*$/.test(prefix)) throw new MarkupKitError("Page directory prefixes need leading and trailing slashes around URL slugs.", dir);
+      if (!/^\/(?:[^/]+\/)*$/.test(prefix) || !prefix.split("/").filter(Boolean).every(segment => routeSlug.test(segment))) throw new MarkupKitError("Page directory prefixes need leading and trailing slashes around URL slugs.", dir);
       const directory = resolve(root, dir);
       if (!within(root, directory)) throw new MarkupKitError("Page directories must be inside the application root.", directory);
       let present = true;

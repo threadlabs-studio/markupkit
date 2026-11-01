@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0
+
+- Navigation queries accept `exclude` to omit mounted subtrees consistently from flat lists, trees, breadcrumbs and previous/next links.
+- Allow dotted URL slugs and page-directory prefixes, including historical documentation paths such as `/v/1.2.3/`. Relative directory segments remain invalid.
+
 ## 0.5.0
 
 - Read canonical `component` identities during preparation and client navigation, with the legacy-root precedence defined by HTML Next. Qualify installed consumers against the current alpha.81 runtime while preserving the supported minimum.
