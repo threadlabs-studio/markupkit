@@ -19,6 +19,18 @@ const echo = (name: string) => `<template component="${name}"><defs><prop name="
 const echoLoader = (entries: string) => `export const entries = () => ${entries};
   export const load = ({ params }) => ({ props: { params: JSON.stringify(params) } });`;
 
+it("mounts dotted version segments while rejecting relative directory segments", async () => {
+  const root = await site({});
+  await write(root, "versions/docs/index.html", '<template component="release-docs"><h1>Release 1.2.3</h1></template>');
+  const application = await createApplication({ root, pages: [{ dir: "versions/docs", prefix: "/v/1.2.3/" }] });
+  try {
+    expect((await application.render("/v/1.2.3/")).html).toContain("Release 1.2.3");
+  } finally { await application.close(); }
+  for (const prefix of ["/v/../", "/v/./", "/v/1..2/"]) {
+    await expect(createApplication({ root, pages: [{ dir: "versions/docs", prefix }] })).rejects.toThrow("Page directory prefixes");
+  }
+});
+
 it("matches [...name] and [[...name]] catch-alls with list params, after literal and [name] routes", async () => {
   const root = await site({
     "docs/static.html": echo("page-static"),

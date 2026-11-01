@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- Allow dotted URL slugs and page-directory prefixes, including historical documentation paths such as `/v/1.2.3/`. Relative directory segments remain invalid.
+
 ## 0.5.0
 
 - Read canonical `component` identities during preparation and client navigation, with the legacy-root precedence defined by HTML Next. Qualify installed consumers against the current alpha.81 runtime while preserving the supported minimum.
