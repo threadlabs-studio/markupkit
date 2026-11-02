@@ -4,6 +4,8 @@ export interface ApplicationOptions {
   /** Parent-owned private-reader services. The caller owns their creation and shutdown. */
   readonly services?: unknown;
   readonly root?: string;
+  /** Component/controller import-map entries. Plugins resolve their own package resources to file URLs. */
+  readonly imports?: Readonly<Record<string, string>>;
   /** Absolute URL path prefix, for example /docs/. */
   readonly base?: string;
   /** Canonical origin used by static loaders, sitemap.xml, and alias pages' canonical links; defaults to http://localhost. */

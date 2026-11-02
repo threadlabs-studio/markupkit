@@ -26,8 +26,8 @@ const builtins = [["mk-nav", "@threadlabs/markupkit/components/nav.html"], ["mk-
   ["mk-pager", "@threadlabs/markupkit/components/pager.html"]] as const;
 
 /** MarkupKit's import map: @/ is the project root, as in Nuxt, and built-ins resolve from this package. */
-function importMap(root: string) {
-  return { imports: { "@/": pathToFileURL(root).href + "/", "@threadlabs/markupkit/components/": new URL("../components/", import.meta.url).href } };
+function importMap(root: string, imports: ApplicationOptions["imports"]) {
+  return { imports: { ...imports, "@/": pathToFileURL(root).href + "/", "@threadlabs/markupkit/components/": new URL("../components/", import.meta.url).href } };
 }
 
 function packageResource(path: string) {
@@ -74,7 +74,7 @@ export async function createApplicationInternals(input: ApplicationOptions = {},
   const scripts = await headScripts(options, config.root);
   const csp = policy ?? config.csp;
   const ownsServer = moduleServer === undefined;
-  const map = importMap(config.root);
+  const map = importMap(config.root, options.imports);
   const server = moduleServer ?? await createServer({ root: config.root, configFile: false, appType: "custom", resolve: { alias: rootAlias(config.root) },
     mode: "development", publicDir: false, server: { middlewareMode: true, watch: null, hmr: false },
     optimizeDeps: { noDiscovery: true, include: [] }, logLevel: "silent" });
