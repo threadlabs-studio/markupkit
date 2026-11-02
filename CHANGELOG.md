@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- Let applications and plugins supply component/controller import-map entries. A documentation tool can resolve its own package resources without requiring a direct dependency in the consuming project.
+
 ## 0.6.0
 
 - Navigation queries accept `exclude` to omit mounted subtrees consistently from flat lists, trees, breadcrumbs and previous/next links.

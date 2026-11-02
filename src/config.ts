@@ -68,6 +68,7 @@ export async function withPlugins(options: ApplicationOptions): Promise<Applicat
     // Page folders, stylesheets, and routes add to the application's own; app/pages stays the default folder.
     merged = { ...merged, ...added, plugins: options.plugins,
       ...(added.pages === undefined ? {} : { pages: [...merged.pages ?? [{ dir: "app/pages", optional: true }], ...added.pages] }),
+      ...(added.imports === undefined ? {} : { imports: { ...added.imports, ...merged.imports } }),
       ...(added.css === undefined ? {} : { css: [...merged.css ?? [], ...added.css] }),
       // An earlier plugin's named layout wins over a later plugin's of the same name.
       ...(layouts === undefined ? {} : { [pluginLayouts]: { ...layouts, ...merged[pluginLayouts] } }),

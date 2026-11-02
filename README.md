@@ -61,3 +61,15 @@ Its Markdown dependency and theme live in the consumer, outside the platform run
 package. Its input is trusted, checked-in author content; it does not sanitize arbitrary Markdown.
 
 MarkupKit is MIT-licensed.
+
+Component and controller import maps can also come from application options or a plugin's `config` hook. Resolve package resources in the plugin's module scope:
+
+```ts
+const code = import.meta.resolve("your-doc-tool/controllers/code.js");
+const plugin = {
+  name: "your-doc-tool",
+  config: () => ({ imports: { "your-doc-tool/controllers/code.js": code } })
+};
+```
+
+An application's entries take precedence over plugin entries. Prefix mappings end both the key and the URL with `/`. These entries resolve component resources and their declared modules; regular JavaScript imports use their module's package scope.

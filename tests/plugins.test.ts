@@ -376,3 +376,11 @@ it("preserves duplicate URL diagnostics when alias owners share a conflicting pa
   await write(root, "docs/02.index.note", "<article>Second home</article>");
   await expect(createApplication({ root, plugins: [notes(root)] })).rejects.toThrow(/01\.index\.note.*02\.index\.note/s);
 });
+
+it("merges plugin resource imports while retaining application and earlier plugin choices", async () => {
+  const options = await withPlugins({ imports: { "app/": "file:///app/", shared: "file:///app/shared.js" }, plugins: [
+    { name: "first", config: () => ({ imports: { "first/": "file:///first/", shared: "file:///first/shared.js" } }) },
+    { name: "second", config: () => ({ imports: { "second/": "file:///second/", "first/": "file:///second/override/" } }) },
+  ] });
+  expect(options.imports).toEqual({ "app/": "file:///app/", shared: "file:///app/shared.js", "first/": "file:///first/", "second/": "file:///second/" });
+});
