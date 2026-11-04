@@ -6,7 +6,7 @@ import { createServer, isRunnableDevEnvironment, normalizePath } from "vite";
 
 import { createApplication } from "./application.js";
 import { readManifest } from "./build.js";
-import { browserPlugin, browserSources, stylesheetSources } from "./browser.js";
+import { browserPlugin, browserSources, hotModule, stylesheetSources } from "./browser.js";
 import { configure, globalStylesheets, MarkupKitError, rootAlias, runHook, withPlugins, within } from "./config.js";
 import { developmentPolicyOptions } from "./csp.js";
 import { authoredHead, documentHTML, escapeHTML, type PageAssets } from "./document.js";
@@ -78,6 +78,11 @@ export async function devApplication(input: ServerOptions = {}): Promise<Applica
   // Once, before Vite watches, so generated files don't trigger a reload; edits don't rerun it.
   await runHook(options, "buildStart", { command: "dev", root: config.root, base: config.base });
   const sources = new Map<string, string>();
+  // Each browser module's last generated source, and the revision at which it last changed, which a
+  // page's payload response names to the page updating in place (client.ts's `changed`).
+  const served = new Map<string, string>();
+  const changes = new Map<string, number>();
+  const hot = "virtual:markupkit/hot";
   // Vite refuses to serve a Windows 8.3 short name such as RUNNER~1, so page-wide stylesheets go by their real paths.
   const css = await Promise.all(globalStylesheets(options, config.root).map(file => realpath(file).catch(() => file)));
   let watchReady!: () => void;
@@ -87,6 +92,12 @@ export async function devApplication(input: ServerOptions = {}): Promise<Applica
   const vite = await createServer({ root: config.root, configFile: false, appType: "custom", base: config.base, resolve: { alias: rootAlias(config.root) },
     mode: "development", plugins: [browserPlugin(sources), {
       name: "markupkit-watch-ready", configureServer(server) { server.watcher.once("ready", watchReady); },
+      // A source that no browser module is, such as a definition, page or data file, updates open pages in place.
+      hotUpdate({ modules }) {
+        if (this.environment.name !== "client" || modules.length > 0) return;
+        const module = this.environment.moduleGraph.getModuleById(`\0${hot}`);
+        return module === undefined ? undefined : [module];
+      },
       async closeBundle() { await refreshing?.catch(() => {}); await application?.close(); },
     }],
     server: { host: options.host ?? "127.0.0.1", port: options.port ?? 3000,
@@ -97,16 +108,20 @@ export async function devApplication(input: ServerOptions = {}): Promise<Applica
   const assets = (page: RenderedPage): PageAssets => {
     const graphId = createHash("sha256").update(page.components.map(component => component.definition.source.file).join("\0")).digest("hex").slice(0, 16);
     const id = `virtual:markupkit/${graphId}`;
-    for (const [module, source] of browserSources(page.components, { base: config.base, prefetch: config.prefetch }, id, css)) sources.set(module, source);
     const styles = stylesheetSources(page.components);
-    for (const [id, css] of styles) sources.set(id, css);
+    for (const [module, source] of [...browserSources(page.components, { base: config.base, prefetch: config.prefetch }, id, css, true), ...styles]) {
+      if (served.has(module) && served.get(module) !== source) changes.set(module, current);
+      served.set(module, source);
+      sources.set(module, source);
+    }
     // Vite's HTML transformer applies its base to root-relative assets a second time.
     // This document is already composed for its deployment URL; only modules use Vite.
     // Page-wide stylesheets first, so component styles follow them in the cascade.
     return { styles: [...css.map(normalizePath), ...styles.keys()].map(id => config.base + "@fs/" + id),
-      modules: [config.base + "@vite/client", ...csp === false ? [] : [config.base + "@id/" + reporter], config.base + "@id/" + id] };
+      modules: [config.base + "@vite/client", ...csp === false ? [] : [config.base + "@id/" + reporter], config.base + "@id/" + hot, config.base + "@id/" + id] };
   };
   const reporter = "virtual:markupkit/csp-report";
+  sources.set(hot, hotModule(0));
   if (csp !== false) {
     sources.set(reporter, policyReporter);
     vite.ws.on("markupkit:csp", (report: { page: string; blocked: string; directive: string; line: string; blocks: boolean }) => {
@@ -125,7 +140,6 @@ export async function devApplication(input: ServerOptions = {}): Promise<Applica
     vite.moduleGraph.invalidateAll();
     const environment = vite.environments.ssr;
     if (environment !== undefined && isRunnableDevEnvironment(environment)) environment.runner.clearCache();
-    vite.ws.send({ type: "full-reload" });
   };
   vite.watcher.on("add", change).on("unlink", change).on("change", change);
   vite.middlewares.use((request, response, next) => {
@@ -144,6 +158,7 @@ export async function devApplication(input: ServerOptions = {}): Promise<Applica
             current = wanted;
             sources.clear();
             if (csp !== false) sources.set(reporter, policyReporter);
+            sources.set(hot, hotModule(current));
             await previous.close();
           }
         })().finally(() => { refreshing = undefined; });
@@ -162,7 +177,14 @@ export async function devApplication(input: ServerOptions = {}): Promise<Applica
         return;
       }
       // Middleware, endpoints, and pages come from the runtime-neutral handler; this adapts Node's request and response.
-      await sendResponse(await application.fetch(nodeRequest(request, response)), response);
+      const result = await application.fetch(nodeRequest(request, response));
+      const since = Number(request.headers["x-markupkit-revision"] ?? NaN);
+      if (payload && Number.isInteger(since)) {
+        response.setHeader("x-markupkit-revision", String(current));
+        response.setHeader("x-markupkit-changed", JSON.stringify([...changes].flatMap(([module, at]) =>
+          at > since ? [config.base + (module.endsWith(".css") ? "@fs/" : "@id/") + module] : [])));
+      }
+      await sendResponse(result, response);
     })().catch(error => {
       vite.ssrFixStacktrace(error instanceof Error ? error : new Error(String(error)));
       if (response.headersSent) { response.end(); return; }

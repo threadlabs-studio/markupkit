@@ -15,7 +15,7 @@ it("preserves the published mk metadata, navigation component and layer contract
       expect(application.routes[0]?.pageName).toBe("contract-page");
       const page = await application.render("/");
       expect(page.body).toContain("Selected helper");
-      expect(page.body).toContain('data-component="mk-nav"');
+      expect(page.body).toContain(' component="mk-nav"');
       expect(page.body).toContain('data-mk-layer="0"');
       expect(page.body).toContain('aria-current="page"');
       expect(page.body).toContain("Published contract");

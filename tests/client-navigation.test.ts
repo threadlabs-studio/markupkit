@@ -56,7 +56,7 @@ async function site(): Promise<string> {
   // A page with a third-party declared script, whose origin the site's one policy allows on every page.
   await write(root, "app/pages/pay.html", `<template component="pay-page"><defs><title>Pay</title><meta name="mk:navigation" content="hidden">
     <script src="https://pay.example/v3/" loading="lazy"></script></defs><article><h1>Pay</h1></article></template>`);
-  // Another <shared-badge> cannot join a document that already defines one (HR001).
+  // Another <shared-badge> cannot join a document that already defines one.
   await write(root, "app/pages/conflict.html", `<meta name="mk:page" content="conflict-page"><template component="shared-badge"><i>conflict badge</i></template>
     <template component="conflict-page"><defs><title>Conflict</title><meta name="mk:navigation" content="hidden"></defs><article><h1><shared-badge></shared-badge></h1></article></template>`);
   // Loader state, typed props, a nested component, a form control, a declared read, and a controller.
@@ -126,7 +126,7 @@ async function scenario(browser: Browser, url: string, built: boolean): Promise<
       .map(async path => [path, await moduleOf(url, path)] as const)));
     await context.route("https://external.test/**", route => route.fulfill({ contentType: "text/html", body: "<title>External</title>" }));
     await page.goto(url);
-    await page.waitForFunction(() => document.querySelector('[data-component="site-shell"]')?.getAttribute("data-connections") === "1");
+    await page.waitForFunction(() => document.querySelector('[component="site-shell"]')?.getAttribute("data-connections") === "1");
     await mark(page);
     expect(await page.locator("html").getAttribute("dir")).toBeNull();
     await page.getByRole("button", { name: "Menu" }).click();
@@ -170,7 +170,7 @@ async function scenario(browser: Browser, url: string, built: boolean): Promise<
     expect(await page.evaluate(() => {
       const shell = document.getElementById("mk-layer-0")!;
       return { kept: shell === (window as unknown as { shell: Element }).shell, connections: shell.dataset.connections,
-        expanded: shell.querySelector("button")!.getAttribute("aria-expanded"), page: document.getElementById("mk-layer-1")!.dataset.component,
+        expanded: shell.querySelector("button")!.getAttribute("aria-expanded"), page: document.getElementById("mk-layer-1")!.getAttribute("component"),
         ready: document.getElementById("mk-layer-1")!.dataset.ready, color: getComputedStyle(document.getElementById("mk-layer-1")!).color,
         shared: getComputedStyle(document.querySelector("#mk-layer-1 h1")!).borderBottomColor,
         current: [...document.querySelectorAll("nav a")].map(link => [link.getAttribute("href"), link.getAttribute("aria-current")]),
@@ -214,11 +214,11 @@ async function scenario(browser: Browser, url: string, built: boolean): Promise<
     await page.locator("#items").click();
     await settled(page, "one");
     expect(count(payloadPath("items/one/"))).toBe(1);
-    expect(await page.evaluate(() => [document.getElementById("mk-layer-0")!.dataset.component, document.getElementById("mk-layer-0") === (window as unknown as { shell: Element }).shell]))
+    expect(await page.evaluate(() => [document.getElementById("mk-layer-0")!.getAttribute("component"), document.getElementById("mk-layer-0") === (window as unknown as { shell: Element }).shell]))
       .toEqual(["items-shell", false]);
     await page.locator("#home").click();
     await settled(page, "Home");
-    expect(await page.evaluate(() => [document.getElementById("mk-layer-0")!.dataset.component, document.querySelector(".shell button")!.getAttribute("aria-expanded"),
+    expect(await page.evaluate(() => [document.getElementById("mk-layer-0")!.getAttribute("component"), document.querySelector(".shell button")!.getAttribute("aria-expanded"),
       document.getElementById("mk-layer-1")!.dataset.ready])).toEqual(["site-shell", "false", "home"]);
     expect(await marked(page)).toBe(true);
 
@@ -318,7 +318,7 @@ async function layers(page: Page) {
     markup: [0, 1].map(index => {
       const copy = document.getElementById(`mk-layer-${index}`)!.cloneNode(true) as Element;
       for (const element of [copy, ...copy.querySelectorAll("*")]) {
-        const wirePrefixes = (element.getAttribute("data-component") ?? "").split(/\s+/).filter(Boolean).map(tag => `data-${tag}-prop-`);
+        const wirePrefixes = (element.getAttribute("component") ?? "").split(/\s+/).filter(Boolean).map(tag => `data-${tag}-prop-`);
         const original = [...element.attributes];
         const attributes = original.filter(({ name, value }) => !wirePrefixes.some(prefix => name.startsWith(prefix)) || !(value.startsWith("[") || value.startsWith("{")))
           .map(({ name, value }) => [name, value] as const).sort(([a], [b]) => a < b ? -1 : 1);
@@ -337,8 +337,8 @@ async function parity(browser: Browser, url: string): Promise<void> {
   try {
     const { page, errors, count } = await open(context);
     await page.goto(url);
-    await page.waitForFunction(() => document.querySelector('[data-component="site-shell"]')?.getAttribute("data-connections") === "1");
-    const shell = page.locator('[data-component="site-shell"]');
+    await page.waitForFunction(() => document.querySelector('[component="site-shell"]')?.getAttribute("data-connections") === "1");
+    const shell = page.locator('[component="site-shell"]');
     const initialNavigationWire = await shell.getAttribute("data-site-shell-prop-navigation");
     await mark(page);
     await page.locator("#counter").click();
@@ -462,7 +462,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("client navigation th
         expect(await page.evaluate(() => {
           const docs = document.getElementById("mk-layer-1")!;
           return [docs === (window as unknown as { docs: Element }).docs, docs.dataset.connections, docs.querySelector("aside")!.dataset.section,
-            document.getElementById("mk-layer-2")!.dataset.component];
+            document.getElementById("mk-layer-2")!.getAttribute("component")];
         })).toEqual([true, "1", "/docs/b/", "b-page"]);
         const tree = () => page.evaluate(() => [document.querySelector<HTMLDetailsElement>("nav details")!.open, document.querySelector("nav summary")!.textContent,
           document.querySelector('nav a[aria-current="page"]')?.textContent ?? null]);
@@ -474,7 +474,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("client navigation th
         // Leaving the folder drops its layout, and its folder closes in the tree.
         await page.locator("#to-home").click();
         await settled(page, "Home");
-        expect(await page.evaluate(() => [document.getElementById("mk-layer-1")!.dataset.component, document.getElementById("mk-layer-2")])).toEqual(["home-page", null]);
+        expect(await page.evaluate(() => [document.getElementById("mk-layer-1")!.getAttribute("component"), document.getElementById("mk-layer-2")])).toEqual(["home-page", null]);
         expect(await tree()).toEqual([false, "docs", "Home"]);
         expect([await marked(page), errors]).toEqual([true, []]);
       } finally { await browser.close(); }
@@ -609,7 +609,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("client navigation to
         await context.addCookies([{ name: "reader", value: "ada", url: server.url }]);
         const { page, errors, requests } = await open(context);
         await page.goto(server.url);
-        await page.waitForFunction(() => document.querySelector('[data-component="home-page"]') !== null && document.readyState === "complete");
+        await page.waitForFunction(() => document.querySelector('[component="home-page"]') !== null && document.readyState === "complete");
         await mark(page);
         await page.locator("#two").click();
         await settled(page, "Page 2");
@@ -670,7 +670,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("form actions", () =>
       try {
         const { page, errors, count } = await open(await browser.newContext());
         await page.goto(server.url + "todos/");
-        await page.waitForFunction(() => document.querySelector('[data-component="todos-page"]') !== null && document.readyState === "complete");
+        await page.waitForFunction(() => document.querySelector('[component="todos-page"]') !== null && document.readyState === "complete");
         await mark(page);
         // Every change to the pending attributes, in order.
         await page.evaluate(() => {
@@ -726,5 +726,72 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("form actions", () =>
         await page.getByText(`${name} plain`).waitFor();
       } finally { await browser.close(); }
     }, 60_000);
+  }
+});
+
+describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("development updates in place", () => {
+  let root: string;
+  let development: ApplicationServer;
+  const leaf = `<template component="demo-leaf"><defs><state name="n" type="number" value="0"></state>
+    <handler name="add"><set name="n" expr:value="$n + 1"></set></handler></defs><button type="button" on:click="add">{$n}</button></template>`;
+  const panel = (tag: string, extra: string) => `<link rel="component" href="@/app/components/leaf.html"><template component="demo-panel"><defs>
+    <state name="count" type="number" value="0"></state><handler name="add"><set name="count" expr:value="$count + 1"></set></handler></defs>
+    <${tag} class="panel">${extra}<button type="button" class="add" on:click="add">{$count}</button><demo-leaf class="nested"></demo-leaf><slot></slot></${tag}></template>`;
+  const home = (heading: string) => `<link rel="component" href="@/app/components/panel.html"><link rel="component" href="@/app/components/leaf.html">
+    <template component="home-page"><defs><title>Home</title></defs><article><h1>${heading}</h1>
+    <demo-panel><demo-leaf class="slotted"></demo-leaf></demo-panel><demo-leaf class="other"></demo-leaf></article></template>`;
+  beforeAll(async () => {
+    root = await mkdtemp(join(tmpdir(), "markupkit-hot-"));
+    await write(root, "package.json", '{"type":"module"}');
+    await write(root, "app/layouts/default.html", `<template component="site-shell"><div class="shell"><slot name="page"></slot><div class="spacer"></div></div>
+      <style>.spacer { height: 3000px; }</style></template>`);
+    await write(root, "app/components/leaf.html", leaf);
+    await write(root, "app/components/panel.html", panel("section", ""));
+    await write(root, "app/pages/index.html", home("Home"));
+    development = await devApplication({ root, port: 0 });
+  }, 120_000);
+  afterAll(async () => {
+    await development?.close();
+    if (root) await rm(root, { recursive: true, force: true });
+  });
+
+  for (const [name, type] of engines) {
+    it(`${name} re-renders a changed component's instances with their state, and a changed page, without a reload`, async () => {
+      await write(root, "app/components/panel.html", panel("section", ""));
+      await write(root, "app/pages/index.html", home("Home"));
+      const browser = await type.launch({ headless: true });
+      try {
+        const { page, errors } = await open(await browser.newContext());
+        await page.goto(development.url);
+        await page.waitForFunction(() => document.readyState === "complete");
+        await page.locator(".panel .add").click();
+        await page.locator(".panel .add").click();
+        await page.locator(".slotted").click();
+        for (let index = 0; index < 2; index += 1) await page.locator(".nested").click();
+        for (let index = 0; index < 3; index += 1) await page.locator(".other").click();
+        await page.evaluate(() => { scrollTo(0, 1200); document.querySelector<HTMLElement>(".slotted")!.dataset.kept = ""; });
+        await mark(page);
+        const spacer = () => page.evaluate(() => document.querySelector(".spacer")!.getBoundingClientRect().top);
+        let before = await spacer();
+        // The scroll position stays, or, where the browser anchors scrolling, what it shows stays in place.
+        const shows = (slotted: string) => page.evaluate(([selector, top]) => ({ count: document.querySelector(".panel .add")!.textContent, nested: document.querySelector(".nested")!.textContent,
+          slotted: document.querySelector(selector)?.textContent, other: document.querySelector(".other")!.textContent,
+          scroll: scrollY === 1200 || Math.abs(document.querySelector(".spacer")!.getBoundingClientRect().top - top) < 1 }), [slotted, before] as const);
+        const scrolled = async () => { await page.evaluate(() => scrollTo(0, 1200)); before = await spacer(); };
+        await write(root, "app/components/panel.html", panel("article", "<h2>Edited</h2>"));
+        await page.locator("article.panel h2").waitFor();
+        // Every instance keeps its state: the panel, the leaf its new template renders, and the leaf slotted into it, which stays the same element.
+        expect([await shows(".slotted[data-kept]"), await marked(page)]).toEqual([{ count: "2", nested: "2", slotted: "1", other: "3", scroll: true }, true]);
+        await page.locator(".panel .add").click();
+        expect(await page.locator(".panel .add").textContent()).toBe("3");
+        // The click scrolled the button into view.
+        await scrolled();
+        // A page's own definition is a component too: it re-renders, and every component it renders keeps its state.
+        await write(root, "app/pages/index.html", home("Welcome"));
+        await page.getByRole("heading", { name: "Welcome" }).waitFor();
+        expect([await shows(".slotted"), await marked(page)]).toEqual([{ count: "3", nested: "2", slotted: "1", other: "3", scroll: true }, true]);
+        expect(errors).toEqual([]);
+      } finally { await browser.close(); }
+    });
   }
 });
