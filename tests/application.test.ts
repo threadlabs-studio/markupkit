@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { encodeHydrationValue, decodeHydrationValue } from "@nextwebwg/html-next/bindings";
@@ -15,6 +15,22 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 async function app(): Promise<string> { const root = await fixture(); roots.push(root); return root; }
 
 describe("application platform", () => {
+  it("resolves a plugin's controller import from its package without a project dependency", async () => {
+    const root = await app();
+    const library = await mkdtemp(join(tmpdir(), "markupkit-tool-package-")); roots.push(library);
+    await write(library, "package.json", '{"name":"fixture-doc-tool","type":"module"}');
+    await write(library, "code.js", 'export default function(host) { host.element.dataset.toolController = "connected"; }');
+    await write(root, "app/pages/index.html", '<template component="tool-page" controller="fixture-doc-tool/code.js"><h1>Package-owned controller</h1></template>');
+    await write(root, "app/pages/index.server.ts", "export const load = () => ({});");
+    const options = { root, plugins: [{ name: "fixture-doc-tool", config: () => ({ imports: { "fixture-doc-tool/": pathToFileURL(library + "/").href } }) }] };
+    const application = await createApplication(options);
+    try { expect((await application.render("/")).body).toContain("Package-owned controller"); }
+    finally { await application.close(); }
+    const built = await buildApplication(options);
+    const scripts = await Promise.all((await readdir(join(built.outDir, "_markupkit"))).filter(name => name.endsWith(".js")).map(name => readFile(join(built.outDir, "_markupkit", name), "utf8")));
+    expect(scripts.join("\n")).toContain("toolController");
+  });
+
   it("prepares a library-owned binding before render and preserves caller overrides", async () => {
     const root = await preparedFixture(); roots.push(root);
     const application = await createApplication({ root });
