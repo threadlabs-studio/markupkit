@@ -1,3 +1,4 @@
+import { launchBrowser } from "./browser-launch.js";
 import { readFile, rm } from "node:fs/promises";
 import { chromium, firefox, webkit } from "playwright";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -15,7 +16,7 @@ for (const [delivery, commonJS] of [["development", false], ["built", false], ["
     it("Chromium adopts the server value without another read and keeps drafts through later updates", async () => {
       const root = await preparedFixture(commonJS);
       let server: ApplicationServer | undefined;
-      const browser = await chromium.launch({ headless: true });
+      const browser = await launchBrowser(chromium);
       try {
         server = delivery === "built"
           ? await startApplication({ outDir: (await buildApplication({ root })).outDir, port: 0 })
@@ -64,7 +65,7 @@ for (const delegated of [false, true]) for (const delivery of ["development", "b
     for (const [name, engine] of [["Chromium", chromium], ["Firefox", firefox], ["WebKit", webkit]] as const) {
       it(`${name} adopts fresh layout preparation while keeping drafts and instance identity`, async () => {
         requests.length = 0;
-        const browser = await engine.launch({ headless: true });
+        const browser = await launchBrowser(engine);
         try {
           const page = await browser.newPage(); let reads = 0; const errors: string[] = [];
           page.on("pageerror", error => errors.push(error.message));
@@ -135,7 +136,7 @@ for (const delivery of ["development", "built"] as const) {
     afterAll(async () => { await server?.close(); if (root) await rm(root, { recursive: true, force: true }); });
     for (const [name, engine] of [["Chromium", chromium], ["Firefox", firefox], ["WebKit", webkit]] as const) {
       it(`${name} adopts private preparation and uses fresh authenticated requests for changes`, async () => {
-        const browser = await engine.launch({ headless: true });
+        const browser = await launchBrowser(engine);
         try {
           const unscripted = await (await browser.newContext({ javaScriptEnabled: false })).newPage();
           await unscripted.goto(server.url);
@@ -199,7 +200,7 @@ for (const delivery of ["development", "built"] as const) {
     afterAll(async () => { await server?.close(); if (root) await rm(root, { recursive: true, force: true }); });
     for (const [name, engine] of [["Chromium", chromium], ["Firefox", firefox], ["WebKit", webkit]] as const) {
       it(`${name} composes browser readers and behavior with retained instance ownership`, async () => {
-        const browser = await engine.launch({ headless: true });
+        const browser = await launchBrowser(engine);
         try {
           const unscripted = await (await browser.newContext({ javaScriptEnabled: false })).newPage();
           await unscripted.goto(server.url);
@@ -259,7 +260,7 @@ for (const delivery of ["development", "built"] as const) {
     afterAll(async () => { await server?.close(); if (root) await rm(root, { recursive: true, force: true }); });
     for (const [name, engine] of [["Chromium", chromium], ["Firefox", firefox], ["WebKit", webkit]] as const) {
       it(`${name} adopts prepared data once, retains drafts and renders fresh navigations from their preparation`, async () => {
-        const browser = await engine.launch({ headless: true });
+        const browser = await launchBrowser(engine);
         try {
           const unscripted = await (await browser.newContext({ javaScriptEnabled: false })).newPage();
           await unscripted.goto(server.url);
@@ -338,7 +339,7 @@ for (const delivery of ["development", "built"] as const) {
     afterAll(async () => { await server?.close(); if (root) await rm(root, { recursive: true, force: true }); });
     for (const [name, engine] of [["Chromium", chromium], ["Firefox", firefox], ["WebKit", webkit]] as const) {
       it(`${name} binds providers, bypasses fixtures and retains local drafts across reconnection`, async () => {
-        const browser = await engine.launch({ headless: true });
+        const browser = await launchBrowser(engine);
         try {
           const unscripted = await (await browser.newContext({ javaScriptEnabled: false })).newPage();
           await unscripted.goto(server.url);
@@ -408,7 +409,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("built application ad
   afterAll(async () => { await server?.close(); if (root) await rm(root, { recursive: true, force: true }); });
   for (const [name, type] of [["Chromium", chromium], ["Firefox", firefox], ["WebKit", webkit]] as const) {
     it(`${name} retains server DOM and edits, connects once, and balances reconnection`, async () => {
-      const browser = await type.launch({ headless: true });
+      const browser = await launchBrowser(type);
       try {
         const staticContext = await browser.newContext({ javaScriptEnabled: false });
         const staticPage = await staticContext.newPage();
@@ -489,7 +490,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("development and docu
   it("serves working development browser modules at a deployment subpath", async () => {
     const root = await fixture();
     const server = await devApplication({ root, base: "/development/", port: 0 });
-    const browser = await chromium.launch({ headless: true });
+    const browser = await launchBrowser(chromium);
     try {
       // Component stylesheets are document links, so they apply at first paint, before any module runs.
       const unscripted = await (await browser.newContext({ javaScriptEnabled: false })).newPage();
@@ -523,7 +524,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("development and docu
 
   it("delivers the documentation theme, search, and live example through the platform", async () => {
     const root = await mkdtemp(join(tmpdir(), "markupkit-docs-browser-"));
-    const browser = await chromium.launch({ headless: true });
+    const browser = await launchBrowser(chromium);
     let server: ApplicationServer | undefined;
     try {
       await buildDocsProof(root, fileURLToPath(new URL("./fixtures/docs/", import.meta.url)), "/proof/");
@@ -562,7 +563,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("page-wide stylesheet
     await write(root, "styles/page.css", "html { background: rgb(1, 2, 3); } body { margin: 0; }");
     await write(root, "app/pages/index.html", '<template component="page-home"><h1>Home</h1></template>');
     const options = { root, css: ["@/styles/page.css"] };
-    const browser = await chromium.launch({ headless: true });
+    const browser = await launchBrowser(chromium);
     try {
       const page = await (await browser.newContext({ javaScriptEnabled: false })).newPage();
       const check = async () => expect(await page.evaluate(() => [getComputedStyle(document.documentElement).backgroundColor, getComputedStyle(document.body).marginTop]))
@@ -586,7 +587,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("the development poli
       const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
       // Restricting connect-src and style-src, which Vite's HMR socket and injected styles need in development.
       const server = await devApplication({ root, port: 0, csp: { "connect-src": ["'self'"], "style-src": ["'self'"] } });
-      const browser = await type.launch({ headless: true });
+      const browser = await launchBrowser(type);
       try {
         const page = await browser.newPage();
         const messages: string[] = [];
@@ -617,7 +618,7 @@ for (const delivery of ["development", "built"] as const) {
   it.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")(`${delivery} scoped plugin pages hydrate and navigate independently`, async () => {
     const root = await mkdtemp(join(tmpdir(), "markupkit-scoped-browser-"));
     let server: ApplicationServer | undefined;
-    const browser = await chromium.launch({ headless: true });
+    const browser = await launchBrowser(chromium);
     try {
       await write(root, "docs/index.note", "Source");
       await write(root, "docs/counter.ts", `if (typeof document === 'undefined') throw new Error('Browser controller ran during SSR');

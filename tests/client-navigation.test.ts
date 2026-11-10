@@ -1,3 +1,4 @@
+import { launchBrowser } from "./browser-launch.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -130,7 +131,7 @@ async function scenario(browser: Browser, url: string, built: boolean): Promise<
     await mark(page);
     expect(await page.locator("html").getAttribute("dir")).toBeNull();
     await page.getByRole("button", { name: "Menu" }).click();
-    await page.evaluate(() => { (window as unknown as { shell: Element }).shell = document.getElementById("mk-layer-0")!; });
+    await page.evaluate(() => { (window as unknown as { shell: Element }).shell = document.querySelector<HTMLElement>('[data-mk-layer="0"]')!; });
     expect(await page.locator('nav a[href="/kit/"]').getAttribute("aria-current")).toBe("page");
     expect(await head(page)).toEqual({ titles: 1, descriptions: ["Home page"], schema: [], widgets: 0, runs: 0 });
     if (built) expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(9, 9, 9)");
@@ -168,11 +169,11 @@ async function scenario(browser: Browser, url: string, built: boolean): Promise<
     expect(await marked(page)).toBe(true);
     expect(page.url()).toBe(url + "guide/");
     expect(await page.evaluate(() => {
-      const shell = document.getElementById("mk-layer-0")!;
+      const shell = document.querySelector<HTMLElement>('[data-mk-layer="0"]')!;
       return { kept: shell === (window as unknown as { shell: Element }).shell, connections: shell.dataset.connections,
-        expanded: shell.querySelector("button")!.getAttribute("aria-expanded"), page: document.getElementById("mk-layer-1")!.getAttribute("component"),
-        ready: document.getElementById("mk-layer-1")!.dataset.ready, color: getComputedStyle(document.getElementById("mk-layer-1")!).color,
-        shared: getComputedStyle(document.querySelector("#mk-layer-1 h1")!).borderBottomColor,
+        expanded: shell.querySelector("button")!.getAttribute("aria-expanded"), page: document.querySelector<HTMLElement>('[data-mk-layer="1"]')!.getAttribute("component"),
+        ready: document.querySelector<HTMLElement>('[data-mk-layer="1"]')!.dataset.ready, color: getComputedStyle(document.querySelector<HTMLElement>('[data-mk-layer="1"]')!).color,
+        shared: getComputedStyle(document.querySelector('[data-mk-layer="1"] h1')!).borderBottomColor,
         current: [...document.querySelectorAll("nav a")].map(link => [link.getAttribute("href"), link.getAttribute("aria-current")]),
         description: document.querySelector('meta[name="description"]')?.getAttribute("content"), announced: document.getElementById("mk-announcer")!.textContent,
         focus: document.activeElement === document.body, background: getComputedStyle(document.body).backgroundColor };
@@ -195,7 +196,7 @@ async function scenario(browser: Browser, url: string, built: boolean): Promise<
     expect([await marked(page), count("/kit/guide/install/", "fetch")]).toEqual([true, 1]);
     expect(page.url()).toBe(url + "guide/install/#deep");
     expect(await head(page)).toEqual({ titles: 1, descriptions: [], schema: [], widgets: 1, runs: 1 });
-    expect(await page.locator("#mk-layer-1 h1").evaluate(heading => getComputedStyle(heading).borderBottomColor)).toBe("rgb(7, 8, 9)");
+    expect(await page.locator('[data-mk-layer="1"] h1').evaluate(heading => getComputedStyle(heading).borderBottomColor)).toBe("rgb(7, 8, 9)");
     await poll(() => page.evaluate(() => [Math.abs(Math.round(document.getElementById("deep")!.getBoundingClientRect().top)), scrollY > 2000])).toEqual([0, true]);
     await page.evaluate(() => scrollTo(0, 1234));
     await page.evaluate(() => document.querySelector<HTMLAnchorElement>('nav a[href="/kit/guide/"]')!.click());
@@ -214,12 +215,12 @@ async function scenario(browser: Browser, url: string, built: boolean): Promise<
     await page.locator("#items").click();
     await settled(page, "one");
     expect(count(payloadPath("items/one/"))).toBe(1);
-    expect(await page.evaluate(() => [document.getElementById("mk-layer-0")!.getAttribute("component"), document.getElementById("mk-layer-0") === (window as unknown as { shell: Element }).shell]))
+    expect(await page.evaluate(() => [document.querySelector<HTMLElement>('[data-mk-layer="0"]')!.getAttribute("component"), document.querySelector<HTMLElement>('[data-mk-layer="0"]') === (window as unknown as { shell: Element }).shell]))
       .toEqual(["items-shell", false]);
     await page.locator("#home").click();
     await settled(page, "Home");
-    expect(await page.evaluate(() => [document.getElementById("mk-layer-0")!.getAttribute("component"), document.querySelector(".shell button")!.getAttribute("aria-expanded"),
-      document.getElementById("mk-layer-1")!.dataset.ready])).toEqual(["site-shell", "false", "home"]);
+    expect(await page.evaluate(() => [document.querySelector<HTMLElement>('[data-mk-layer="0"]')!.getAttribute("component"), document.querySelector(".shell button")!.getAttribute("aria-expanded"),
+      document.querySelector<HTMLElement>('[data-mk-layer="1"]')!.dataset.ready])).toEqual(["site-shell", "false", "home"]);
     expect(await marked(page)).toBe(true);
 
     // Native behavior: fragments, downloads, other browsing contexts, and modified clicks.
@@ -316,7 +317,7 @@ async function layers(page: Page) {
   await page.getByText("Loaded data", { exact: true }).waitFor();
   return page.evaluate(() => ({
     markup: [0, 1].map(index => {
-      const copy = document.getElementById(`mk-layer-${index}`)!.cloneNode(true) as Element;
+      const copy = document.querySelector<HTMLElement>(`[data-mk-layer="${index}"]`)!.cloneNode(true) as Element;
       for (const element of [copy, ...copy.querySelectorAll("*")]) {
         const wirePrefixes = (element.getAttribute("component") ?? "").split(/\s+/).filter(Boolean).map(tag => `data-${tag}-prop-`);
         const original = [...element.attributes];
@@ -327,7 +328,7 @@ async function layers(page: Page) {
       }
       return copy.outerHTML.replace(/ data-html-next-instance="[^"]*"/g, "");
     }),
-    connections: document.getElementById("mk-layer-1")!.dataset.connections, value: document.querySelector("input")!.value,
+    connections: document.querySelector<HTMLElement>('[data-mk-layer="1"]')!.dataset.connections, value: document.querySelector("input")!.value,
   }));
 }
 
@@ -386,7 +387,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("client navigation", 
   for (const [name, type] of engines) {
     for (const mode of ["built", "development"] as const) {
       it(`${name} navigates ${mode} pages in place, rendering them like the server`, async () => {
-        const browser = await type.launch({ headless: true });
+        const browser = await launchBrowser(type);
         const url = mode === "built" ? preview.url : development.url;
         try { await scenario(browser, url, mode === "built"); await parity(browser, url); }
         finally { await browser.close(); }
@@ -394,7 +395,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("client navigation", 
     }
 
     it(`${name} prefetches pages for links on screen when the site chooses "visible"`, async () => {
-      const browser = await type.launch({ headless: true });
+      const browser = await launchBrowser(type);
       try {
         const { page, requests, count } = await open(await browser.newContext());
         await page.goto(visible.url);
@@ -408,7 +409,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("client navigation", 
   }
 
   it("leaves links as document navigations without JavaScript", async () => {
-    const browser = await chromium.launch({ headless: true });
+    const browser = await launchBrowser(chromium);
     try {
       const page = await (await browser.newContext({ javaScriptEnabled: false })).newPage();
       await page.goto(preview.url);
@@ -450,19 +451,19 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("client navigation th
 
   for (const [name, type] of engines) {
     it(`${name} keeps the layouts two pages in one folder share`, async () => {
-      const browser = await type.launch({ headless: true });
+      const browser = await launchBrowser(type);
       try {
         const { page, errors } = await open(await browser.newContext());
         await page.goto(preview.url + "docs/a/");
-        await page.waitForFunction(() => document.getElementById("mk-layer-1")?.dataset.connections === "1");
+        await page.waitForFunction(() => document.querySelector<HTMLElement>('[data-mk-layer="1"]')?.dataset.connections === "1");
         await mark(page);
-        await page.evaluate(() => { (window as unknown as { docs: Element }).docs = document.getElementById("mk-layer-1")!; });
+        await page.evaluate(() => { (window as unknown as { docs: Element }).docs = document.querySelector<HTMLElement>('[data-mk-layer="1"]')!; });
         await page.locator("#to-b").click();
         await settled(page, "B");
         expect(await page.evaluate(() => {
-          const docs = document.getElementById("mk-layer-1")!;
+          const docs = document.querySelector<HTMLElement>('[data-mk-layer="1"]')!;
           return [docs === (window as unknown as { docs: Element }).docs, docs.dataset.connections, docs.querySelector("aside")!.dataset.section,
-            document.getElementById("mk-layer-2")!.getAttribute("component")];
+            document.querySelector<HTMLElement>('[data-mk-layer="2"]')!.getAttribute("component")];
         })).toEqual([true, "1", "/docs/b/", "b-page"]);
         const tree = () => page.evaluate(() => [document.querySelector<HTMLDetailsElement>("nav details")!.open, document.querySelector("nav summary")!.textContent,
           document.querySelector('nav a[aria-current="page"]')?.textContent ?? null]);
@@ -474,7 +475,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("client navigation th
         // Leaving the folder drops its layout, and its folder closes in the tree.
         await page.locator("#to-home").click();
         await settled(page, "Home");
-        expect(await page.evaluate(() => [document.getElementById("mk-layer-1")!.getAttribute("component"), document.getElementById("mk-layer-2")])).toEqual(["home-page", null]);
+        expect(await page.evaluate(() => [document.querySelector<HTMLElement>('[data-mk-layer="1"]')!.getAttribute("component"), document.querySelector<HTMLElement>('[data-mk-layer="2"]')])).toEqual(["home-page", null]);
         expect(await tree()).toEqual([false, "docs", "Home"]);
         expect([await marked(page), errors]).toEqual([true, []]);
       } finally { await browser.close(); }
@@ -512,7 +513,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("client navigation be
 
   for (const [name, type] of engines) for (const mode of ["built", "development"] as const) {
     it(`${name} loads a ${mode} page as a document when its definition conflicts, and in place when it does not`, async () => {
-      const browser = await type.launch({ headless: true });
+      const browser = await launchBrowser(type);
       const url = mode === "built" ? preview.url : development.url;
       try {
         const { page, errors } = await open(await browser.newContext());
@@ -603,7 +604,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("client navigation to
 
   for (const [name, type] of engines) {
     it(`${name} renders a server page in place with the link's query and the reader's cookies`, async () => {
-      const browser = await type.launch({ headless: true });
+      const browser = await launchBrowser(type);
       try {
         const context = await browser.newContext();
         await context.addCookies([{ name: "reader", value: "ada", url: server.url }]);
@@ -666,7 +667,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("form actions", () =>
 
   for (const [name, type] of engines) {
     it(`${name} submits a form in place, with pending attributes and focus on the invalid field`, async () => {
-      const browser = await type.launch({ headless: true });
+      const browser = await launchBrowser(type);
       try {
         const { page, errors, count } = await open(await browser.newContext());
         await page.goto(server.url + "todos/");
@@ -711,7 +712,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("form actions", () =>
     }, 60_000);
 
     it(`${name} submits the same form as a document without JavaScript`, async () => {
-      const browser = await type.launch({ headless: true });
+      const browser = await launchBrowser(type);
       try {
         const page = await (await browser.newContext({ javaScriptEnabled: false })).newPage();
         await page.goto(server.url + "todos/");
@@ -759,7 +760,7 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("development updates 
     it(`${name} re-renders a changed component's instances with their state, and a changed page, without a reload`, async () => {
       await write(root, "app/components/panel.html", panel("section", ""));
       await write(root, "app/pages/index.html", home("Home"));
-      const browser = await type.launch({ headless: true });
+      const browser = await launchBrowser(type);
       try {
         const { page, errors } = await open(await browser.newContext());
         await page.goto(development.url);

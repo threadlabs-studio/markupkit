@@ -105,7 +105,7 @@ export function page(runtime: Runtime, options: ClientOptions, pageComponents: R
 }
 
 const payloadURL = (base: string, url: URL) => `${base}_markupkit/pages/${url.pathname.slice(base.length)}payload.json${url.search}`;
-const layer = (root: Document, index: number) => root.querySelector(`[data-mk-layer="${index}"]`) ?? root.getElementById(`mk-layer-${index}`);
+const layer = (root: Document, index: number) => root.querySelector(`[data-mk-layer="${index}"]`);
 const fresh = (time: number) => performance.now() - time < 30_000;
 const loaded = async (url: string, signal?: AbortSignal): Promise<Response> => {
   const response = await fetch(url, signal === undefined ? {} : { signal });
@@ -153,13 +153,14 @@ async function render(runtime: Runtime, payload: Payload): Promise<Rendered> {
     const { component: tag, attributes: authored, props, state } = payload.layers[index]!;
     const component = components.get(tag);
     if (component === undefined) throw new Error(`MarkupKit cannot render <${tag}>: no page module defines it.`);
-    const attributes: Record<string, string> = { id: `mk-layer-${index}`, "data-mk-layer": String(index), ...index === 0 ? {} : { slot: "page" } };
+    const attributes: Record<string, string> = index === 0 ? {} : { slot: "page" };
     const html: Record<string, string> = {};
     for (const [name, value] of Object.entries(authored)) {
       const prop = component[1][name];
       if (prop === undefined) attributes[name] = value; else if (props === undefined) html[prop] = value;
     }
     const root = component[0]({ ...props, attributes, ...layers.length === 0 ? {} : { slots: { page: [layers[0]] } } }, props === undefined ? html : undefined);
+    root.setAttribute("data-mk-layer", String(index));
     if (state !== undefined) {
       const host = runtime.generatedHost(root);
       if (host === undefined) throw new Error(`MarkupKit cannot give layer ${index} its state.`);

@@ -109,7 +109,7 @@ export async function devApplication(input: ServerOptions = {}): Promise<Applica
     const graphId = createHash("sha256").update(page.components.map(component => component.definition.source.file).join("\0")).digest("hex").slice(0, 16);
     const id = `virtual:markupkit/${graphId}`;
     const styles = stylesheetSources(page.components);
-    for (const [module, source] of [...browserSources(page.components, { base: config.base, prefetch: config.prefetch }, id, css, true), ...styles]) {
+    for (const [module, source] of [...browserSources(page.components, { base: config.base, prefetch: config.prefetch }, id, css, true, page.layers.map(layer => layer.component)), ...styles]) {
       if (served.has(module) && served.get(module) !== source) changes.set(module, current);
       served.set(module, source);
       sources.set(module, source);
