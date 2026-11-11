@@ -71,6 +71,10 @@ endpoints, or middleware runs `npm start` on Node, or the same server on Deno or
 one that leads to a missing page or anchor ([link check](/configuration#link-check)). With an
 `origin`, it also writes [`sitemap.xml`](/configuration#search-engines).
 
+When a loader, endpoint, middleware, or page fails in `markupkit dev`, the page shows the error with
+its file, line, and column, the source lines around it, and the stack, and the terminal prints the
+same location. A failed `markupkit build` prints the error and the file and line it came from.
+
 The commands take an optional project folder (`markupkit dev site`), `--base /docs/` to serve the site
 under a path, `--origin` for absolute URLs, `--out-dir`, `--port`, and `--host`. Flags override the
 same settings in `markupkit.config.ts`. The servers listen on 127.0.0.1, port 3000, unless you pass

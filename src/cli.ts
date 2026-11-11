@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { MarkupKitError, loadConfig, loadEnvironment } from "./config.js";
+import { MarkupKitError, errorLocation, loadConfig, loadEnvironment } from "./config.js";
 import type { ServerOptions } from "./types.js";
 
 const usage = `Usage: markupkit <command> [root] [options]
@@ -23,6 +23,7 @@ Options:
 
 Each command loads .env, .env.local, .env.<mode> and .env.<mode>.local; dev's mode is development, the others' production.`;
 
+let root = process.cwd();
 async function main(): Promise<void> {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     base: { type: "string" }, origin: { type: "string" }, "out-dir": { type: "string" },
@@ -31,7 +32,7 @@ async function main(): Promise<void> {
   if (values.help || positionals.length === 0) { console.log(usage); return; }
   const command = positionals[0];
   if (!["dev", "build", "preview", "start"].includes(command!) || positionals.length > 2) throw new MarkupKitError("Choose dev, build, preview, or start and an optional application root.");
-  const root = resolve(positionals[1] ?? process.cwd());
+  root = resolve(positionals[1] ?? root);
   loadEnvironment(root, command === "dev" ? "development" : "production");
   // start runs the build alone: it reads no config file, which Vite would load.
   const port = values.port ?? (command === "start" ? process.env.PORT : undefined);
@@ -63,4 +64,8 @@ async function main(): Promise<void> {
   const stop = () => { void server.close().then(() => { process.exitCode = 0; }).catch(error => { console.error(String(error)); process.exitCode = 1; }); };
   process.once("SIGINT", stop); process.once("SIGTERM", stop);
 }
-void main().catch(error => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });
+void main().catch(error => {
+  const location = errorLocation(error, root);
+  console.error((error instanceof Error ? error.message : String(error)) + (location === undefined ? "" : `\n  at ${location.label}`));
+  process.exitCode = 1;
+});
