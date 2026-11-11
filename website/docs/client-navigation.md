@@ -1,6 +1,6 @@
 ---
 title: Moving between pages
-order: 6
+order: 7
 description: client navigation · prefetch · opt-outs
 ---
 

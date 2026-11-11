@@ -1,6 +1,6 @@
 ---
 title: Deployment
-order: 7
+order: 8
 description: static hosts · markupkit start · Deno · Bun · prerendered and server pages
 ---
 
