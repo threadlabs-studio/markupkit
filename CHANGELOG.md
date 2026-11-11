@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1
+
+- Accept Node releases after 24, including Node 26. Node 22 remains supported from 22.22.2.
+
 ## 0.7.0
 
 - `markupkit dev` updates open pages in place when a component, page, layout definition, Markdown or data file changes. Each changed component module is imported again and replaces its definition. Every instance re-renders with its props and slotted content, and it and every component it renders keep each state the new definitions still declare. Layers take their new props and changed stylesheets load again, with scroll and every other component unchanged. A change to a controller or another browser module, or to which layouts a page uses, reloads the page.
