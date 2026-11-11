@@ -14,7 +14,7 @@ reads use only public sources can also deploy to a static host.
 
 ## Get started
 
-Use Node 22 (22.22.2 or later) or Node 24 (24.15 or later). Install MarkupKit and add its commands to `package.json`:
+Use Node 24.15 or later, or Node 22 from 22.22.2. Install MarkupKit and add its commands to `package.json`:
 
 ```sh
 npm install @threadlabs/markupkit

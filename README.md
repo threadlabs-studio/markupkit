@@ -21,7 +21,7 @@ prerenders pages for any static host and writes a request server for pages that 
 request, which `markupkit start` runs on Node and Deno and Bun run through its `fetch`.
 [The server-rendering design](./docs/server-rendering.md) records how requests are answered.
 
-Use Node `>=22.22.2 <23 || >=24.15 <25`. Install `@threadlabs/markupkit` and add its commands to your
+Use Node 24.15 or later, or Node 22 from 22.22.2. Install `@threadlabs/markupkit` and add its commands to your
 `package.json` scripts:
 
 ```json
