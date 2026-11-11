@@ -495,8 +495,8 @@ from the outside in, then the page's. Each receives the `data` of the ones befor
 MarkupKit sends the rendered HTML, then a script per page with the page's components compiled to
 direct DOM code. They take over that HTML in place: modules connect and browser data reads
 start, without re-rendering, and whatever a reader typed before the script ran stays. A page ships
-only the HTML Next code its components use. After that, links to other pages render in place; see
-[Moving between pages](/client-navigation).
+only the HTML Next code its components use. After that, links to other pages render in place, and `location.reload()` runs the loaders again
+in place; see [Moving between pages](/client-navigation).
 
 - A component module can be TypeScript: write `module="./counter.ts"`, and MarkupKit compiles it.
   Export a named `connect` for browser behavior. Run `tsc` separately to check types.

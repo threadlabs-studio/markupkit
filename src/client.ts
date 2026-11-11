@@ -107,8 +107,8 @@ export function page(runtime: Runtime, options: ClientOptions, pageComponents: R
 const payloadURL = (base: string, url: URL) => `${base}_markupkit/pages/${url.pathname.slice(base.length)}payload.json${url.search}`;
 const layer = (root: Document, index: number) => root.querySelector(`[data-mk-layer="${index}"]`) ?? root.getElementById(`mk-layer-${index}`);
 const fresh = (time: number) => performance.now() - time < 30_000;
-const loaded = async (url: string, signal?: AbortSignal): Promise<Response> => {
-  const response = await fetch(url, signal === undefined ? {} : { signal });
+const loaded = async (url: string, signal?: AbortSignal, cache: RequestCache = "default"): Promise<Response> => {
+  const response = await fetch(url, signal === undefined ? { cache } : { signal, cache });
   if (!response.ok || response.redirected) throw new Error(`MarkupKit cannot load ${url} (${response.status}).`);
   return response;
 };
@@ -213,7 +213,7 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
     document.head.append(link);
   };
   const prefetched = new Map<string, { readonly time: number; readonly payload: Promise<Payload> }>();
-  const payloadOf = (url: URL, signal?: AbortSignal) => loaded(payloadURL(base, url), signal).then(response => response.json() as Promise<Payload>);
+  const payloadOf = (url: URL, signal?: AbortSignal, cache?: RequestCache) => loaded(payloadURL(base, url), signal, cache).then(response => response.json() as Promise<Payload>);
   /** The page an HTML link would visit in place, if any. An unparsable href is not a page. */
   const target = (anchor: Element) => {
     const url = anchor instanceof HTMLAnchorElement ? URL.parse(anchor.href) : null;
@@ -301,10 +301,11 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
     // A validation error renders the page with its status, such as 422, as a document shows it.
     return parse(response, url);
   };
-  const payload = async (url: URL, signal: AbortSignal) => {
+  /** A reload asks the server again, past any prefetch or HTTP cache. */
+  const payload = async (url: URL, signal: AbortSignal, reload: boolean) => {
     const cached = prefetched.get(url.pathname + url.search);
     prefetched.delete(url.pathname + url.search);
-    const data = await (cached !== undefined && fresh(cached.time) ? cached.payload : payloadOf(url, signal));
+    const data = await (!reload && cached !== undefined && fresh(cached.time) ? cached.payload : payloadOf(url, signal, reload ? "no-cache" : "default"));
     // The page's module registers its definitions before anything renders. An absolute URL is the
     // module's identity everywhere: Vite's development server adds ?import to a path, a second URL.
     await Promise.all(data.modules.map(src => import(/* @vite-ignore */ new URL(src, location.href).href)));
@@ -314,6 +315,9 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
 
   const visit = async (url: URL, event: NavigateEvent, form?: HTMLFormElement): Promise<void> => {
     const { signal } = event;
+    // A script's reload renders the same page with its loaders' new data, keeping every layer, the page's
+    // included, with its state, focus and scroll.
+    const reload = event.navigationType === "reload";
     const sheets: HTMLLinkElement[] = [];
     let committed = false;
     clearTimeout(intended);
@@ -323,7 +327,7 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
       // The payload carries data, not markup; a page it cannot render loads from its HTML. A page
       // whose definitions conflict with this document's would conflict there too.
       const { next, layers, adopt: hydrate } = await (handed !== undefined ? handed :
-        event.formData !== null ? submit(url, form, event.sourceElement, event.formData, signal) : payload(url, signal).catch(error => {
+        event.formData !== null ? submit(url, form, event.sourceElement, event.formData, signal) : payload(url, signal, reload).catch(error => {
         if (signal.aborted || error instanceof Conflict) throw error;
         console.warn("MarkupKit renders this page from its HTML:", error);
         return html(url, signal);
@@ -345,8 +349,9 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
       // Resolved against the page's URL: the next document has no <base>, which base-uri 'none' forbids.
       const modules = [...next.head.querySelectorAll('script[type="module"][src]')].map(script => import(/* @vite-ignore */ new URL(script.getAttribute("src")!, url).href));
       await Promise.all([...loading, ...modules]);
+      const depth = reload ? layers.length : layers.length - 1;
       const adopting = [];
-      for (let index = 0; index < layers.length - 1 && layer(document, index) !== null && componentNames(layer(document, index)!) === componentNames(layers[index]!); index += 1) {
+      for (let index = 0; index < depth && layer(document, index) !== null && componentNames(layer(document, index)!) === componentNames(layers[index]!); index += 1) {
         const tags = componentNames(layer(document, index)!).split(/\s+/);
         adopting.push(Promise.all(tags.map(tag => components.get(tag)?.[2]?.())));
       }
@@ -361,9 +366,9 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
         if (next.documentElement.hasAttribute("dir")) document.documentElement.dir = next.documentElement.dir;
         else document.documentElement.removeAttribute("dir");
         // Layouts persist while each depth renders the same component: they keep their DOM, state,
-        // and controllers, and take the new rendering's props. The page layer is always replaced.
+        // and controllers, and take the new rendering's props. The page layer is replaced, except on a reload.
         let index = 0;
-        while (index < layers.length - 1 && layer(document, index) !== null && componentNames(layer(document, index)!) === componentNames(layers[index]!)) {
+        while (index < depth && layer(document, index) !== null && componentNames(layer(document, index)!) === componentNames(layers[index]!)) {
           const update = () => runtime.adoptRenderedProps(layer(document, index)!, layers[index]!);
           for (const [at, adoptPrepared] of adopters[index]!.entries()) {
             const applyCaller = at === 0 ? update : () => {};
@@ -374,17 +379,20 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
           index += 1;
         }
         // A page sits in its layout's slot; the layout projects the new page as it did the old one.
-        runtime.replaceProjectedNode(layer(document, index)!, layers[index]!);
         // Server markup from the fallback is adopted in place, as the first page was.
-        if (hydrate) adopt(layers[index]!);
+        if (index < layers.length) {
+          runtime.replaceProjectedNode(layer(document, index)!, layers[index]!);
+          if (hydrate) adopt(layers[index]!);
+        }
         rendered = url.pathname + url.search;
         watch();
       };
       signal.throwIfAborted();
       // The swap disconnects the old page and connects the new one, and HTML Next reconciles the head
       // once in the microtasks after it, which a view transition's update includes.
-      if (typeof document.startViewTransition !== "function" || !transitions(document.styleSheets)) commit();
+      if (reload || typeof document.startViewTransition !== "function" || !transitions(document.styleSheets)) commit();
       else await document.startViewTransition(commit).updateCallbackDone;
+      if (reload) return;
       const saved = event.navigationType === "traverse" ? positions.get(event.destination.key) : undefined;
       if (saved === undefined) event.scroll(); else scrollTo(...saved);
       // The next task, when the head holds the new page's title, announces it.
@@ -414,13 +422,14 @@ function navigate(runtime: Runtime, { base, prefetch: policy, manifest }: Client
     const source = event.sourceElement;
     // A submission's source is its submitter, or the form itself without one.
     const form = event.formData === null ? undefined : source instanceof HTMLFormElement ? source : (source as HTMLButtonElement | null)?.form ?? undefined;
-    // Reloads, downloads, fragment and history.pushState changes, and other documents stay native.
+    // Downloads, fragment and history.pushState changes, and other documents stay native. The browser's
+    // reload button fires no navigate event; a script's reload renders in place (visit).
     // Modified clicks and link and form targets open other browsing contexts without this event.
-    if (!event.canIntercept || event.navigationType === "reload" || event.downloadRequest !== null || event.info === documentLoad ||
+    if (!event.canIntercept || event.downloadRequest !== null || event.info === documentLoad ||
       !local(url, form ?? source) || event.destination.sameDocument && (event.navigationType !== "traverse" || url.pathname + url.search === rendered)) return;
     // After the swap, a new entry scrolls to its fragment or the top, back and forward return to
     // where the entry was left, and focus resets as after a document load.
-    event.intercept({ scroll: "manual", async handler() {
+    event.intercept({ scroll: "manual", focusReset: event.navigationType === "reload" ? "manual" : "after-transition", async handler() {
       const id = ++latest;
       document.documentElement.setAttribute("data-mk-navigating", "");
       form?.setAttribute("data-mk-submitting", "");
@@ -495,7 +504,8 @@ export async function changed(since: number): Promise<void> {
     applied = Number(response.headers.get("x-markupkit-revision") ?? since);
   } catch (error) {
     console.warn(error);
-    location.reload();
+    // As a document: client navigation renders a script's reload in place.
+    if ("navigation" in window) void navigation.reload({ info: documentLoad }); else location.reload();
   }
 }
 

@@ -177,6 +177,22 @@ renders, so an indicator needs no announcement of its own. Scripts read the brow
 `navigation.transition` is set while a navigation is under way, and `navigatesuccess` and
 `navigateerror` fire when it ends.
 
+## Loading a page's data again
+
+To show a page's latest data, for example after a script changes it through an
+[endpoint](/server#endpoints), reload the page from a script:
+
+```js
+await fetch('/api/todos/', { method: 'POST', body });
+location.reload();
+```
+
+MarkupKit runs the page's loaders and its layouts' again and gives each its new props in place. The
+page and its layouts keep their state, what the reader has typed, focus and scroll, as a layout
+does between pages, and the reload ignores prefetched and HTTP-cached data. `navigation.reload()`
+does the same. The browser's reload button, and any browser without client navigation, loads the
+whole document.
+
 ## Running code after a navigation
 
 Controllers connect and disconnect with their components, so most code needs nothing else. For
