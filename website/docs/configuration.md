@@ -654,6 +654,55 @@ markupkit <command> [root] [options]
 Flags override the same settings in `markupkit.config.ts`. `start` runs the build alone and doesn't read
 the config file.
 
+## Environment variables
+
+Each `markupkit` command loads `.env` files from the project folder into `process.env` before it reads
+the config file. `dev` uses the `development` mode and the other commands use `production`:
+
+::: table
+
+- File: `.env`
+  Loads: in every mode.
+
+- File: `.env.local`
+  Loads: in every mode, over `.env`. Keep it out of version control.
+
+- File: `.env.production`, `.env.development`
+  Loads: in its mode, over `.env.local`.
+
+- File: `.env.production.local`, `.env.development.local`
+  Loads: in its mode, over the rest.
+
+:::
+
+A variable already set in the shell or by the host wins over every file. `start` loads them from its
+project folder too, so a server can keep its secrets in `.env.production.local` or in its own
+environment.
+
+Server code (loaders, endpoints, actions, middleware and the config file) reads any variable from
+`process.env`:
+
+```ts
+// app/pages/account.server.ts
+export const load = async () => ({
+  props: { plan: await fetchPlan(process.env.BILLING_API_KEY) },
+});
+```
+
+Browser code reads only variables whose names start with `PUBLIC_`, as `import.meta.env.PUBLIC_NAME`.
+The build writes their values into the browser bundle, so they are visible to everyone; every other
+variable stays on the server:
+
+```js
+// app/pages/home.js
+export function connect(host) {
+  host.root.dataset.analytics = import.meta.env.PUBLIC_ANALYTICS_ID;
+}
+```
+
+MarkupKit [from code](#using-markupkit-from-code) loads no files: the calling process supplies
+`process.env`, for example with `node --env-file=.env`.
+
 ## Using MarkupKit from code
 
 ```ts

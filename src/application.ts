@@ -8,7 +8,7 @@ import { loadNodeComponents } from "@nextwebwg/html-next/node-loader";
 import { createRenderer } from "@nextwebwg/html-next/server";
 import { createServer, isRunnableDevEnvironment, type ViteDevServer } from "vite";
 
-import { MarkupKitError, rootAlias } from "./config.js";
+import { MarkupKitError, rootAlias, publicEnvironment } from "./config.js";
 import { sitePolicy } from "./csp.js";
 import { authoredHead, documentHTML, redirectPage, type PageAssets } from "./document.js";
 import { breadth, compiledPageURL, discoverApplication, matchRoute, parameter, validSegment } from "./routes.js";
@@ -75,7 +75,7 @@ export async function createApplicationInternals(input: ApplicationOptions = {},
   const csp = policy ?? config.csp;
   const ownsServer = moduleServer === undefined;
   const map = importMap(config.root, options.imports);
-  const server = moduleServer ?? await createServer({ root: config.root, configFile: false, appType: "custom", resolve: { alias: rootAlias(config.root) },
+  const server = moduleServer ?? await createServer({ root: config.root, configFile: false, ...publicEnvironment, appType: "custom", resolve: { alias: rootAlias(config.root) },
     mode: "development", publicDir: false, server: { middlewareMode: true, watch: null, hmr: false },
     optimizeDeps: { noDiscovery: true, include: [] }, logLevel: "silent" });
   const environment = server.environments.ssr;

@@ -7,7 +7,7 @@ import { createServer, isRunnableDevEnvironment, normalizePath } from "vite";
 import { createApplication } from "./application.js";
 import { readManifest } from "./build.js";
 import { browserPlugin, browserSources, hotModule, stylesheetSources } from "./browser.js";
-import { configure, globalStylesheets, MarkupKitError, rootAlias, runHook, withPlugins, within } from "./config.js";
+import { configure, globalStylesheets, MarkupKitError, rootAlias, runHook, withPlugins, within, publicEnvironment } from "./config.js";
 import { developmentPolicyOptions } from "./csp.js";
 import { authoredHead, documentHTML, escapeHTML, type PageAssets } from "./document.js";
 import { matchRoute } from "./routes.js";
@@ -89,7 +89,7 @@ export async function devApplication(input: ServerOptions = {}): Promise<Applica
   const watching = new Promise<void>(done => { watchReady = done; });
   let application: Application;
   let refreshing: Promise<void> | undefined;
-  const vite = await createServer({ root: config.root, configFile: false, appType: "custom", base: config.base, resolve: { alias: rootAlias(config.root) },
+  const vite = await createServer({ root: config.root, configFile: false, ...publicEnvironment, appType: "custom", base: config.base, resolve: { alias: rootAlias(config.root) },
     mode: "development", plugins: [browserPlugin(sources), {
       name: "markupkit-watch-ready", configureServer(server) { server.watcher.once("ready", watchReady); },
       // A source that no browser module is, such as a definition, page or data file, updates open pages in place.

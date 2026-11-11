@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { MarkupKitError, loadConfig } from "./config.js";
+import { MarkupKitError, loadConfig, loadEnvironment } from "./config.js";
 import type { ServerOptions } from "./types.js";
 
 const usage = `Usage: markupkit <command> [root] [options]
@@ -19,7 +19,9 @@ Options:
   --port 3000                    Port; start also reads PORT
   --host 127.0.0.1               Host; start also reads HOST
   --render-workers 4             Workers that render pages; the CPU count, up to 8, by default
-  -h, --help                     Show this help`;
+  -h, --help                     Show this help
+
+Each command loads .env, .env.local, .env.<mode> and .env.<mode>.local; dev's mode is development, the others' production.`;
 
 async function main(): Promise<void> {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
@@ -30,6 +32,7 @@ async function main(): Promise<void> {
   const command = positionals[0];
   if (!["dev", "build", "preview", "start"].includes(command!) || positionals.length > 2) throw new MarkupKitError("Choose dev, build, preview, or start and an optional application root.");
   const root = resolve(positionals[1] ?? process.cwd());
+  loadEnvironment(root, command === "dev" ? "development" : "production");
   // start runs the build alone: it reads no config file, which Vite would load.
   const port = values.port ?? (command === "start" ? process.env.PORT : undefined);
   const host = values.host ?? (command === "start" ? process.env.HOST : undefined);
