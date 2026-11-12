@@ -428,7 +428,7 @@ describe("application platform", () => {
       const { html } = await application.render("/");
       const head = html.split("<head>")[1]!.split("</head>")[0]!;
       expect(head).toContain(">Page &amp; title</title>");
-      expect(head).toContain('name="description" content="a < b"');
+      expect(head).toContain('name="description" content="a &lt; b"');
       expect(head).toContain('property="og:title" content="Page &amp; title"');
       expect(head).toContain('href="https://example.test/page/"');
       expect(head).not.toContain("Site description");
