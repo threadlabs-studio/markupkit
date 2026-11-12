@@ -2,7 +2,7 @@ import { parentPort, workerData } from "node:worker_threads";
 import { build } from "vite";
 import { join } from "node:path";
 import { browserPlugin } from "./browser.js";
-import { rootAlias } from "./config.js";
+import { rootAlias, publicEnvironment } from "./config.js";
 import type { BrowserBuild, ServerBuild, ServerBundleEntry } from "./bundle.js";
 
 const work = workerData as { readonly browser: BrowserBuild } | { readonly server: ServerBuild };
@@ -12,7 +12,7 @@ try {
   if ("server" in work) {
     const options = work.server;
     // Packages stay imports, resolved from the application's node_modules where the server runs.
-    const result = await build({ root: options.root, configFile: false, mode: "production", publicDir: false, resolve: { alias: rootAlias(options.root) }, logLevel: "silent",
+    const result = await build({ root: options.root, configFile: false, ...publicEnvironment, mode: "production", publicDir: false, resolve: { alias: rootAlias(options.root) }, logLevel: "silent",
       build: { ssr: true, outDir: options.outDir, emptyOutDir: false, copyPublicDir: false, target: "es2022", minify: false,
         rolldownOptions: { input: options.inputs, output: { format: "es", entryFileNames: "[name].js", chunkFileNames: "chunks/[name]-[hash].js" } } } });
     for (const output of Array.isArray(result) ? result : [result]) {
@@ -24,7 +24,7 @@ try {
     }
   } else {
     const options = work.browser;
-    await build({ root: options.root, configFile: false, mode: "production", base: options.base, publicDir: join(options.root, "public"), resolve: { alias: rootAlias(options.root) },
+    await build({ root: options.root, configFile: false, ...publicEnvironment, mode: "production", base: options.base, publicDir: join(options.root, "public"), resolve: { alias: rootAlias(options.root) },
       logLevel: "silent", plugins: [browserPlugin(options.sources, inputs)],
       build: { outDir: options.outDir, emptyOutDir: false, copyPublicDir: false, assetsDir: "_markupkit", target: "es2022", manifest: "_markupkit/vite-manifest.json", modulePreload: false,
         rolldownOptions: { input: Object.fromEntries([...options.sources.keys()].filter(id => id.startsWith("virtual:markupkit/page-")).map(id => [id.slice("virtual:markupkit/".length), id])),

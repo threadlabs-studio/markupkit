@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.0
+
+- Load `.env`, `.env.local`, `.env.<mode>` and `.env.<mode>.local` into `process.env` for every `markupkit` command, with the shell's variables winning. Browser code reads `PUBLIC_` variables as `import.meta.env.PUBLIC_NAME`; no other variable reaches a browser bundle.
+
 ## 0.7.1
 
 - Accept Node releases after 24, including Node 26. Node 22 remains supported from 22.22.2.

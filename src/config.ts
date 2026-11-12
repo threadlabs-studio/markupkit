@@ -22,6 +22,24 @@ export async function loadConfig(root = process.cwd()): Promise<ApplicationOptio
   return configured as ApplicationOptions;
 }
 
+/**
+ * Vite options for every module server and bundle: browser code reads only PUBLIC_ variables, as
+ * import.meta.env.PUBLIC_NAME, and they come from process.env, which loadEnvironment fills.
+ */
+export const publicEnvironment = { envDir: false, envPrefix: "PUBLIC_" } as const;
+
+/**
+ * The markupkit command loads root's .env files into process.env. The most specific file loads first
+ * and Node never replaces a variable already set, so the shell wins over .env.<mode>.local, then
+ * .env.<mode>, .env.local and .env.
+ */
+export function loadEnvironment(root: string, mode: "development" | "production"): void {
+  for (const file of [`.env.${mode}.local`, `.env.${mode}`, ".env.local", ".env"]) {
+    const path = resolve(root, file);
+    if (existsSync(path)) process.loadEnvFile(path);
+  }
+}
+
 export class MarkupKitError extends Error {
   constructor(message: string, readonly source?: string) {
     super(source === undefined ? message : `${source}: ${message}`);
