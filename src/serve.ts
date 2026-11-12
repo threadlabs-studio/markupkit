@@ -7,7 +7,7 @@ import { createServer, isRunnableDevEnvironment, normalizePath } from "vite";
 import { createApplication } from "./application.js";
 import { readManifest } from "./build.js";
 import { browserPlugin, browserSources, hotModule, stylesheetSources } from "./browser.js";
-import { configure, globalStylesheets, MarkupKitError, rootAlias, runHook, withPlugins, within, publicEnvironment } from "./config.js";
+import { configure, errorLocation, globalStylesheets, MarkupKitError, rootAlias, runHook, withPlugins, within, publicEnvironment, type ErrorLocation } from "./config.js";
 import { developmentPolicyOptions } from "./csp.js";
 import { authoredHead, documentHTML, escapeHTML, type PageAssets } from "./document.js";
 import { matchRoute } from "./routes.js";
@@ -23,6 +23,16 @@ function methodAllowed(request: IncomingMessage, response: ServerResponse): bool
   response.writeHead(405, { allow: "GET, HEAD" }); response.end(); return false;
 }
 
+/** The lines around a source position, with the failing line and column marked. */
+async function codeFrame({ file, line, column }: ErrorLocation): Promise<string> {
+  const lines = (await readFile(file, "utf8").catch(() => "")).split(/\r?\n/);
+  if (line > lines.length) return "";
+  const first = Math.max(1, line - 2), last = Math.min(lines.length, line + 2), width = String(last).length;
+  return lines.slice(first - 1, last).flatMap((text, index) => {
+    const number = first + index, row = `${number === line ? ">" : " "} ${String(number).padStart(width)} | ${text}`;
+    return number === line ? [row, `  ${" ".repeat(width)} | ${" ".repeat(Math.max(0, column - 1))}^`] : [row];
+  }).join("\n");
+}
 export async function previewApplication(input: ServerOptions = {}): Promise<ApplicationServer> {
   const options = await withPlugins(input) as ServerOptions;
   const config = configure(options);
@@ -185,11 +195,16 @@ export async function devApplication(input: ServerOptions = {}): Promise<Applica
           at > since ? [config.base + (module.endsWith(".css") ? "@fs/" : "@id/") + module] : [])));
       }
       await sendResponse(result, response);
-    })().catch(error => {
-      vite.ssrFixStacktrace(error instanceof Error ? error : new Error(String(error)));
+    })().catch(async (error: unknown) => {
+      // The module runner has already mapped the stack to the application's source.
+      const location = errorLocation(error, config.root);
+      console.error(...location === undefined ? [] : [location.label], error);
       if (response.headersSent) { response.end(); return; }
+      const frame = location === undefined ? "" : await codeFrame(location);
+      const stack = error instanceof Error ? error.stack ?? String(error) : String(error);
       response.writeHead(500, { "content-type": "text/html; charset=utf-8" });
-      response.end(documentHTML(`<main><h1>Application error</h1><pre>${escapeHTML(String(error))}</pre></main>`, { html: authoredHead + "<title>Application error</title>" }));
+      response.end(documentHTML(`<main><h1>Application error</h1>${location === undefined ? "" : `<p><code>${escapeHTML(location.label)}</code></p>`}` +
+        `${frame === "" ? "" : `<pre>${escapeHTML(frame)}</pre>`}<pre>${escapeHTML(stack)}</pre></main>`, { html: authoredHead + "<title>Application error</title>" }));
     });
   });
   try { await vite.listen(); await watching; }

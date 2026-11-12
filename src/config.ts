@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { isAbsolute, posix, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { checkPolicyOptions } from "./csp.js";
 import type { ApplicationOptions, MarkupKitPlugin, RouteLayer } from "./types.js";
 
@@ -45,6 +46,28 @@ export class MarkupKitError extends Error {
     super(source === undefined ? message : `${source}: ${message}`);
     this.name = "MarkupKitError";
   }
+}
+export interface ErrorLocation { readonly file: string; readonly line: number; readonly column: number; readonly label: string }
+/**
+ * Where an error starts in the application: an HTML Next diagnostic's position, or else the first stack
+ * frame under root and outside node_modules. label is that position relative to root.
+ */
+export function errorLocation(error: unknown, root: string): ErrorLocation | undefined {
+  const { diagnostic, stack } = (error ?? {}) as { diagnostic?: { source?: unknown; line?: unknown; column?: unknown }; stack?: unknown };
+  const roots = [root];
+  try { roots.push(realpathSync(root)); } catch { /* A root that does not exist has only its own path. */ }
+  const path = (source: string) => source.startsWith("file:") ? fileURLToPath(source) : source;
+  const at = (file: string, line: number, column: number): ErrorLocation => {
+    const parent = roots.find(root => within(root, file));
+    return { file, line, column, label: `${parent === undefined ? file : relative(parent, file)}:${line}:${column}` };
+  };
+  if (typeof diagnostic?.source === "string" && typeof diagnostic.line === "number")
+    return at(path(diagnostic.source), diagnostic.line, typeof diagnostic.column === "number" ? diagnostic.column : 1);
+  for (const [, source, line, column] of String(stack ?? "").matchAll(/^\s*at (?:async )?(?:.*\()?(.+?):(\d+):(\d+)\)?$/gm)) {
+    const file = path(source!);
+    if (roots.some(root => within(root, file)) && !file.split(sep).includes("node_modules")) return at(file, Number(line), Number(column));
+  }
+  return undefined;
 }
 export function within(parent: string, child: string): boolean {
   const path = relative(parent, child);

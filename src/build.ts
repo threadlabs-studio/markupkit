@@ -282,6 +282,10 @@ export async function buildApplication(input: ApplicationOptions = {}): Promise<
     catch (error) { if (previous) await rename(backup, config.outDir); throw error; }
     if (previous) await rm(backup, { recursive: true, force: true });
     return { outDir: config.outDir, routes, browserInputs };
+  } catch (error) {
+    // V8 formats a stack when it is first read; closing the loaders' module runner drops their source maps.
+    void (error as { stack?: unknown } | null)?.stack;
+    throw error;
   } finally {
     try { await application.close(); }
     finally { await rm(stage, { recursive: true, force: true }); }

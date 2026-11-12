@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1
+
+- `markupkit dev` shows a failure's file, line, and column, the source lines around it, and the stack on its error page, and prints the location in the terminal. A failed `markupkit build` prints the location under the error. Locations come from HTML Next diagnostics for templates and from the source-mapped stack for loaders and other modules. A build reads a failure's stack before it closes its loaders, while their source maps are still loaded, so the line is the source's.
+
 ## 0.8.0
 
 - Load `.env`, `.env.local`, `.env.<mode>` and `.env.<mode>.local` into `process.env` for every `markupkit` command, with the shell's variables winning. Browser code reads `PUBLIC_` variables as `import.meta.env.PUBLIC_NAME`; no other variable reaches a browser bundle.
