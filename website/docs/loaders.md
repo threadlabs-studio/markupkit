@@ -298,6 +298,20 @@ export function load() {
 Loader files run only on the server, never in the browser, so they can read files, call APIs, and
 import server-only packages. `@/` is the project root.
 
+In TypeScript, `satisfies Loader` checks a loader against what it receives and returns, and
+`PageAction`, `EndpointHandler`, and `Middleware` type the [form actions](/forms),
+[endpoints, and middleware](/server) the same way:
+
+```ts
+// app/pages/team.server.ts
+import type { Loader } from '@threadlabs/markupkit';
+import { people } from '@/lib/people.ts';
+
+export const load = (() => ({ props: { people } })) satisfies Loader;
+```
+
+`tsc` checks these files; the build runs them without type checking.
+
 ## What `load()` returns
 
 ::: table

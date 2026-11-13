@@ -298,8 +298,10 @@ export interface LoadContext {
   readonly response: { status: number; readonly headers: Headers };
 }
 
+/** A page or layout's load export. `satisfies Loader` type-checks its context and result. */
+export type Loader = (context: LoadContext) => LoaderResult | Promise<LoaderResult>;
 export interface ServerModule {
-  readonly load?: (context: LoadContext) => LoaderResult | Promise<LoaderResult>;
+  readonly load?: Loader;
   /**
    * A server-rendered page's form actions by name. A `<form method="post">` runs `default`, and one whose
    * `action` or a button's `formaction` is `?/name` runs `name`. Layouts' loader files have none.
