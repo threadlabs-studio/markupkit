@@ -14,7 +14,21 @@ reads use only public sources can also deploy to a static host.
 
 ## Get started
 
-Use Node 24.15 or later, or Node 22 from 22.22.2. Install MarkupKit and add its commands to `package.json`:
+Use Node 24.15 or later, or Node 22 from 22.22.2. Create an app:
+
+```sh
+npm create markupkit@latest my-app
+cd my-app
+npm install
+npm run dev
+```
+
+Open the URL `npm run dev` prints. The app has a layout, a page with a loader, a form that saves
+messages, a JSON endpoint and page-wide styles, each in its own file.
+
+### Adding MarkupKit to a project
+
+Install MarkupKit and add its commands to `package.json`:
 
 ```sh
 npm install @threadlabs/markupkit

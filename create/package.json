@@ -1,0 +1,31 @@
+{
+  "name": "create-markupkit",
+  "version": "0.10.0",
+  "description": "Create a MarkupKit application: npm create markupkit@latest my-app",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "create-markupkit": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "template"
+  ],
+  "engines": {
+    "node": ">=22.22.2 <23 || >=24.15"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "latest",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/threadlabs-studio/markupkit.git",
+    "directory": "create"
+  },
+  "homepage": "https://threadlabs.studio/markupkit/",
+  "bugs": {
+    "url": "https://github.com/threadlabs-studio/markupkit/issues"
+  }
+}

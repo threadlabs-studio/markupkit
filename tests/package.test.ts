@@ -11,10 +11,22 @@ const workspace = mkdtempSync(join(tmpdir(), "markupkit-package-consumer-"));
 const useCommandShell = process.platform === "win32";
 const componentsPackage = "@nextwebwg/html-next";
 afterAll(() => rmSync(workspace, { recursive: true, force: true }), 60_000);
+let tarball: string | undefined;
 function pack(): string {
+  if (tarball) return tarball;
   const output = execFileSync("corepack", ["pnpm", "pack", "--pack-destination", workspace],
     { cwd: root, encoding: "utf8", shell: useCommandShell }).trim().split("\n").at(-1)!;
-  return isAbsolute(output) ? output : join(workspace, output);
+  return tarball = isAbsolute(output) ? output : join(workspace, output);
+}
+async function start(app: string, args: readonly string[]): Promise<{ url: string; stop: () => void }> {
+  const server = spawn(process.execPath, [...args, join(app, "node_modules/@threadlabs/markupkit/dist/cli.js"), "start", "--port", "0"], { cwd: app });
+  const url = await new Promise<string>((done, reject) => {
+    let output = "";
+    server.stdout.on("data", (chunk: Buffer) => { output += chunk; const match = /MarkupKit start: (\S+)/.exec(output); if (match) done(match[1]!); });
+    server.stderr.on("data", (chunk: Buffer) => { output += chunk; });
+    server.once("exit", code => reject(new Error(`markupkit start exited (${code}): ${output}`)));
+  });
+  return { url, stop: () => server.kill() };
 }
 function runBin(consumer: string, name: string, args: readonly string[] = []): string {
   const bin = join(consumer, "node_modules/.bin", useCommandShell ? `${name}.cmd` : name);
@@ -82,18 +94,41 @@ describe("standalone package contract", () => {
     writeFileSync(join(consumer, "app/api/time.server.ts"), 'export const GET = () => Response.json({ ok: true });');
     writeFileSync(join(consumer, "no-vite.mjs"), 'import { registerHooks } from "node:module"; registerHooks({ resolve(specifier, context, next) { if (/^vite(?:\\/|$)/.test(specifier)) throw new Error(`start loaded ${specifier}`); return next(specifier, context); } });');
     expect(runBin(consumer, "markupkit", ["build"])).toContain("Generated 4 pages");
-    const start = spawn(process.execPath, ["--import", "./no-vite.mjs", join(installed, "dist/cli.js"), "start", "--port", "0"], { cwd: consumer });
+    const { url, stop } = await start(consumer, ["--import", "./no-vite.mjs"]);
     try {
-      const url = await new Promise<string>((done, reject) => {
-        let output = "";
-        start.stdout.on("data", (chunk: Buffer) => { output += chunk; const match = /MarkupKit start: (\S+)/.exec(output); if (match) done(match[1]!); });
-        start.stderr.on("data", (chunk: Buffer) => { output += chunk; });
-        start.once("exit", code => reject(new Error(`markupkit start exited (${code}): ${output}`)));
-      });
       expect(url).toMatch(/\/packed\/$/);
       expect(await (await fetch(`${url}account/`, { headers: { cookie: "user=ada" } })).text()).toContain("Hello ada");
       expect(await (await fetch(`${url}api/time`)).json()).toEqual({ ok: true });
       expect(await (await fetch(url)).text()).toContain("Installed platform");
-    } finally { start.kill(); }
+    } finally { stop(); }
+  }, 180_000);
+
+  it("creates a starter application whose page, endpoint, and form work after a build", async () => {
+    const creator = join(root, "create");
+    expect(JSON.parse(readFileSync(join(creator, "package.json"), "utf8")).version).toBe(JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version);
+    const creatorTarball = join(workspace, execFileSync("npm", ["pack", "--pack-destination", workspace], { cwd: creator, encoding: "utf8", shell: useCommandShell }).trim().split("\n").at(-1)!);
+    const created = execFileSync("npm", ["exec", "--yes", "--package", creatorTarball, "--", "create-markupkit", "My-App"], { cwd: workspace, encoding: "utf8", shell: useCommandShell });
+    expect(created).toContain("npm run dev");
+    const app = join(workspace, "My-App");
+    const manifest = JSON.parse(readFileSync(join(app, "package.json"), "utf8"));
+    expect(manifest.name).toBe("my-app");
+    expect(manifest.dependencies["@threadlabs/markupkit"]).toBe(`^${JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version}`);
+    expect(readFileSync(join(app, ".gitignore"), "utf8")).toContain("node_modules/");
+    expect(() => execFileSync(process.execPath, [join(creator, "index.js"), app], { stdio: "pipe" })).toThrow(/already has files/);
+
+    execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", pack()], { cwd: app, shell: useCommandShell });
+    execFileSync("corepack", ["pnpm", "exec", "tsc", "-p", join(app, "tsconfig.json")], { cwd: root, shell: useCommandShell });
+    expect(runBin(app, "markupkit", ["build"])).toContain("Generated 1 page in");
+    const { url, stop } = await start(app, []);
+    try {
+      expect(await (await fetch(url)).text()).toContain("app/pages/index.server.ts");
+      expect(await (await fetch(`${url}api/hello`)).json()).toEqual({ message: "Hello from app/api/hello.server.ts" });
+      const signed = await fetch(`${url}guestbook/`, { method: "POST", body: new URLSearchParams({ message: "Hello there" }), redirect: "manual" });
+      expect(signed.status).toBe(303);
+      expect(await (await fetch(`${url}guestbook/`)).text()).toContain("<li>Hello there</li>");
+      const invalid = await fetch(`${url}guestbook/`, { method: "POST", body: new URLSearchParams({ message: "x" }) });
+      expect(invalid.status).toBe(422);
+      expect(await invalid.text()).toContain('aria-invalid="true"');
+    } finally { stop(); }
   }, 180_000);
 });

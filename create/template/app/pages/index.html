@@ -1,0 +1,17 @@
+<template component="home-page">
+  <defs>
+    <prop name="parts" type="list(object({ name: string, file: string }))" required>The parts of this app</prop>
+    <title>Home · MarkupKit app</title>
+  </defs>
+  <main>
+    <h1>Welcome to MarkupKit</h1>
+    <p>Each part of this app is one file you can change:</p>
+    <ul>
+      <li $each="part of $parts">{$part.name}: <code>{$part.file}</code></li>
+    </ul>
+    <p>The list above comes from this page's loader. <a href="/api/hello">/api/hello</a> answers with JSON.</p>
+  </main>
+  <style>
+    code { font-size: .9em; }
+  </style>
+</template>

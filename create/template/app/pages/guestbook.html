@@ -1,0 +1,31 @@
+<template component="guestbook-page">
+  <defs>
+    <prop name="messages" type="list(string)" required>Messages, newest first</prop>
+    <prop name="errors" type="object({ message?: string })" default="{}">Field errors</prop>
+    <prop name="values" type="object({ message?: string })" default="{}">Submitted values</prop>
+    <meta name="mk:render" content="server">
+    <title>Guestbook · MarkupKit app</title>
+  </defs>
+  <main>
+    <h1>Guestbook</h1>
+    <p>This page renders on each request. The form works without JavaScript, and with it the page updates in place.</p>
+    <form method="post">
+      <label for="message">Message</label>
+      <input id="message" name="message" required minlength="2" maxlength="140"
+        from:value="$values.message" from:autofocus="$errors.message"
+        from:aria-invalid="$errors.message ? 'true' : 'false'" aria-describedby="message-error">
+      <p id="message-error" class="error" $if="$errors.message">{$errors.message}</p>
+      <button>Sign</button>
+    </form>
+    <ul class="messages">
+      <li $each="message of $messages">{$message}</li>
+    </ul>
+  </main>
+  <style>
+    form { display: grid; gap: .5rem; max-width: 24rem; margin: 1.5rem 0; }
+    input, button { font: inherit; padding: .5rem .75rem; }
+    button { justify-self: start; }
+    .error { margin: 0; color: #c62828; }
+    .messages { padding-left: 1.25rem; }
+  </style>
+</template>
