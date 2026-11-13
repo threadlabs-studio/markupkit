@@ -591,8 +591,9 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("client navigation to
       <a id="three" href="/list/?page=3">Three</a><slot name="page"></slot></div></template>`);
     await write(root, "app/pages/index.html", '<template component="home-page"><defs><title>Home</title></defs><h1>Home</h1></template>');
     await write(root, "app/pages/list.html", `<template component="list-page"><defs>
-      <prop name="title" type="string" required>Title</prop><prop name="reader" type="string" required>Reader</prop><meta name="mk:render" content="server"><title>{$title}</title></defs><article><h1>{$title}</h1><p class="reader">{$reader}</p></article></template>`);
-    await write(root, "app/pages/list.server.ts", 'export const load = ({ url, cookies }) => ({ props: { title: "Page " + (url.searchParams.get("page") ?? "1"), reader: cookies.get("reader") ?? "nobody" } });');
+      <prop name="title" type="string" required>Title</prop><prop name="reader" type="string" required>Reader</prop><prop name="loads" type="number" required>Loads</prop><meta name="mk:render" content="server"><title>{$title}</title></defs>
+      <article><h1>{$title}</h1><p class="reader">{$reader}</p><p class="loads">{$loads}</p><input aria-label="Note"></article></template>`);
+    await write(root, "app/pages/list.server.ts", 'let loads = 0;\nexport const load = ({ url, cookies }) => ({ props: { title: "Page " + (url.searchParams.get("page") ?? "1"), reader: cookies.get("reader") ?? "nobody", loads: ++loads } });');
     const { outDir } = await buildApplication({ root });
     server = await startApplication({ outDir, port: 0 });
   }, 120_000);
@@ -621,6 +622,18 @@ describe.skipIf(process.env.HTMLNEXT_BROWSER_TEST !== "1")("client navigation to
         expect([await page.locator("h1").textContent(), await page.locator(".reader").textContent()]).toEqual(["Page 2", "ada"]);
         expect(requests.some(request => request.path === "/_markupkit/pages/list/payload.json")).toBe(true);
         expect([await marked(page), errors]).toEqual([true, []]);
+        // A script's reload runs the loaders again and keeps the page, with what the reader typed and focus.
+        const note = page.getByRole("textbox", { name: "Note" });
+        await note.fill("draft");
+        const loads = Number(await page.locator(".loads").textContent());
+        await page.evaluate(() => { (document.querySelector('[component~="list-page"]') as Element & { kept?: boolean }).kept = true; location.reload(); });
+        await page.locator(".loads").filter({ hasText: String(loads + 1) }).waitFor();
+        await settled(page, "Page 2");
+        expect([await marked(page), await page.evaluate(() => (document.querySelector('[component~="list-page"]') as Element & { kept?: boolean }).kept),
+          await note.inputValue(), await note.evaluate(input => input === document.activeElement), errors]).toEqual([true, true, "draft", true, []]);
+        // The browser's reload button loads the document.
+        await page.reload();
+        expect(await marked(page)).toBe(false);
       } finally { await browser.close(); }
     }, 60_000);
   }

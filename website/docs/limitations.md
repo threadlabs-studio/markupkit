@@ -1,6 +1,6 @@
 ---
 title: Limitations
-order: 9
+order: 11
 description: what MarkupKit leaves to the host, the browser and later releases
 ---
 
@@ -21,7 +21,7 @@ sites. These needs are handled another way, or arrive in a later release:
   Today: Static output deploys to any static host, and the request server runs on [Node, Deno and Bun](/deployment). Adapters for Vercel, Netlify and Cloudflare are planned for 1.1.
 
 - Need: Images and fonts
-  Today: Put files in `public/` and use the browser's own tools: `srcset`, `sizes`, `loading="lazy"` and `font-display`.
+  Today: Put files in `public/` ([Styles and assets](/styling)) and use the browser's own tools: `srcset`, `sizes`, `loading="lazy"` and `font-display`.
 
 - Need: Localized routes
   Today: Give each language its own folder of pages, and link the versions with `alternate` head links and `hreflang`.

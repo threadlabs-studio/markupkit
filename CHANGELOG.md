@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.0
+
+- A script's reload, `location.reload()` or `navigation.reload()`, runs the page's loaders again and renders their data in place. The page and its layouts keep their state, what the reader typed, focus and scroll. The browser's reload button still loads the document.
+- Add the Styles and assets guide and the Error messages reference.
+
 ## 0.8.2
 
 - Export the `Loader` type, a page or layout's `load` function. `satisfies Loader` type-checks a loader's context and result, as `PageAction`, `EndpointHandler`, and `Middleware` do for actions, endpoints, and middleware.

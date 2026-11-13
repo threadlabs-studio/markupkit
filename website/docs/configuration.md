@@ -1,6 +1,6 @@
 ---
 title: Configuration
-order: 8
+order: 9
 description: markupkit.config.ts · plugins · build hooks · build manifest · command line · using MarkupKit from code
 ---
 
