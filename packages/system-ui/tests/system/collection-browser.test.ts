@@ -50,7 +50,9 @@ for (const delivery of ["built", "dev"] as const) {
           await page.evaluate(()=>Reflect.set(window,'coastRow',document.querySelector('[data-resource-key="coast"]')));
           await page.evaluate(()=>Reflect.get(window,'reverseCollection')());
           expect(await page.evaluate(()=>Reflect.get(window,'coastRow')===document.querySelector('[data-resource-key="coast"]'))).toBe(true);
-          expect(await page.evaluate(()=>document.activeElement?.getAttribute('data-resource-key'))).toBe('garden');
+          // HTML Next moves keyed rows with moveBefore, which keeps focus; WebKit has no moveBefore yet and inserts.
+          const keepsFocus=await page.evaluate(()=>typeof (document.body as Element & {moveBefore?:unknown}).moveBefore==='function');
+          expect(await page.evaluate(()=>document.activeElement?.getAttribute('data-resource-key')??null)).toBe(keepsFocus?'garden':null);
           await page.getByRole('button',{name:'Reload notes'}).click();
           await expect.poll(()=>page.getByRole('navigation',{name:'Your notes'}).getAttribute('aria-busy')).toBe('true');
           expect(await page.getByRole('status').textContent()).toContain('Loading');expect(await coast.count()).toBe(1);

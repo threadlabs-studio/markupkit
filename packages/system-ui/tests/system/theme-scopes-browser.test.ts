@@ -45,7 +45,7 @@ for (const delivery of ["built", "dev"] as const) {
         await page.goto(server.url);
         const a = page.getByRole("textbox", { name: "A", exact: true });
         const b = page.getByRole("textbox", { name: "B", exact: true });
-        const editor = (label: string) => page.locator('[data-component~="mk-text-editor"]').filter({ has: page.getByRole("textbox", { name: label, exact: true }) });
+        const editor = (label: string) => page.locator('[component~="mk-text-editor"]').filter({ has: page.getByRole("textbox", { name: label, exact: true }) });
         for (const label of ["A", "B", "C"]) await expect.poll(() => page.getByRole("textbox", { name: label, exact: true }).getAttribute("readonly")).toBe(null);
         const snapshot = (id: string) => page.evaluate(id => Reflect.get(window, "scopes").snapshot(id), id);
         const sessions = await Promise.all(["a", "b", "c"].map(snapshot));
