@@ -1,6 +1,13 @@
 # System UI
 
-Optional application UI in the MarkupKit family: shared behavior, bounded themes, Looma web controls and native presenter sources. MarkupKit routes, modules and delivery work without it.
+System UI is an HTML Next component library for MarkupKit websites and MarkupNative apps. Both use the same component imports and slots. The window surface follows the system font and color scheme by default. Controls use Looma and follow platform conventions for placement, keyboard input, and focus. An application can opt into a native presenter where it needs a platform view.
+
+```html
+<link rel="component" href="@threadlabs/system-ui/components/window.html">
+<template component="my-app-layout">
+  <system-window><slot name="page"></slot></system-window>
+</template>
+```
 
 The portable root entry has no runtime dependencies or browser/native globals. Install its portable root on its own or select the web and native entries needed by the application. Web controls use HTML Next alpha.74 or later and Looma 0.49.0 or later; MarkupKit applications already supply HTML Next. The optional MarkupKit adapter uses MarkupKit 0.4.4 or later through its public navigation entry.
 
@@ -20,6 +27,18 @@ Source packaging does not establish physical-device, complete input/accessibilit
 The Android source setup is documented in [native/android/README.md](native/android/README.md). It supplies Material editor and collection widgets with presentation-only lifetimes; the application host still supplies the JS engine, model, persistence, navigation and Gradle project. Native SDKs are not installed by this package.
 
 ## Select native presentation
+
+System UI follows the host platform's visual and interaction conventions. Each
+presenter can use an OS widget or draw the control when the presentation needs
+more flexibility. Drawn controls keep the platform's keyboard, focus,
+accessibility and state behavior. Qualify those details on each target.
+
+Applications can supply resolved Looma colors to macOS presenters through
+`SystemLoomaPalette.swift`. Pass a JSON object with `light` and `dark` maps of
+public Looma token names to opaque sRGB hex colors. The host supplies the
+effective scheme and a platform fallback per role. The presenter chooses how
+each role applies to its control. Use the same resolved values for corresponding
+Looma and native control states when the application requests visual parity.
 
 Native tooling can select package-owned registrations alongside application-owned bindings:
 
