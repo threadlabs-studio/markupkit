@@ -73,3 +73,7 @@ const plugin = {
 ```
 
 An application's entries take precedence over plugin entries. Prefix mappings end both the key and the URL with `/`. These entries resolve component resources and their declared modules; regular JavaScript imports use their module's package scope.
+
+## System UI
+
+The optional [`@threadlabs/system-ui`](packages/system-ui/README.md) package supplies shared editing and navigation models, HTML Next compositions over Looma, and native presenter registrations. Import its portable root for application-owned models, `/web` for browser bindings, `/markupkit` for page departure, and `/native` for explicitly selected native presenters. It lives in `packages/system-ui` and uses the alpha release channel.
