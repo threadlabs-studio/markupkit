@@ -39,3 +39,16 @@ jobs:
           fi
           pnpm pack --pack-destination .release
           npm publish ".release/threadlabs-markupkit-$version.tgz" --access public --tag latest --provenance
+      - name: Publish create-markupkit
+        working-directory: create
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          if npm view "create-markupkit@$version" version >/dev/null 2>&1; then
+            echo "create-markupkit@$version is already published."
+            exit 0
+          fi
+          if ! npm view create-markupkit name >/dev/null 2>&1; then
+            echo "::warning::create-markupkit has never been published. Publish it once by hand and add this workflow as its trusted publisher."
+            exit 0
+          fi
+          npm publish --access public --tag latest --provenance

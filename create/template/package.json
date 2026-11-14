@@ -1,0 +1,14 @@
+{
+  "name": "markupkit-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "markupkit dev",
+    "build": "markupkit build",
+    "preview": "markupkit preview",
+    "start": "markupkit start"
+  },
+  "dependencies": {
+    "@threadlabs/markupkit": "*"
+  }
+}

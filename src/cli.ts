@@ -52,7 +52,7 @@ async function main(): Promise<void> {
   if (command === "build") {
     const { buildApplication } = await import("./build.js");
     const result = await buildApplication(options);
-    console.log(`Generated ${result.routes.length} pages in ${result.outDir}`);
+    console.log(`Generated ${result.routes.length} ${result.routes.length === 1 ? "page" : "pages"} in ${result.outDir}`);
     return;
   }
   // Each command loads only its own modules, so start never loads Vite.
