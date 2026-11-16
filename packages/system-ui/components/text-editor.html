@@ -1,0 +1,40 @@
+<link rel="component" href="@threadlabs/looma/components/ui-stack/ui-stack.html">
+<link rel="component" href="@threadlabs/looma/components/ui-form-field/ui-form-field.html">
+<link rel="component" href="@threadlabs/looma/components/ui-textarea/ui-textarea.html">
+<link rel="component" href="@threadlabs/looma/components/ui-button/ui-button.html">
+<link rel="component" href="@threadlabs/looma/components/ui-action-bar/ui-action-bar.html">
+<link rel="component" href="@threadlabs/looma/components/ui-dialog/ui-dialog.html">
+<template component="mk-text-editor" module="./text-editor.js">
+  <defs>
+    <prop name="view" type="object({ schema: string, id: string, revision: number, inputRevision: number, inputId?: string, sessionId: string, active: boolean, appearance: object({ action: string, spacing: string, typography: string }), value: string, field: object({ id: string, label: string, placeholder: string }), status: object({ kind: string, text: string }), save: object({ id: string, label: string, enabled: boolean, pending: boolean }), leave?: object({ id: string, phase: string, title: string, message: string, save: object({ id: string, label: string, enabled: boolean, pending: boolean }), discard: object({ id: string, label: string, enabled: boolean, pending: boolean }), stay: object({ id: string, label: string, enabled: boolean, pending: boolean }) }) })" required>A textEditorView of an application-owned editing model.</prop>
+    <prop name="unavailable" type="string" default="Editing requires JavaScript and an application binding.">Explanation shown while the editing responder is unavailable.</prop>
+    <state name="available" type="boolean" value="false"></state>
+    <state name="problem" type="string" value=""></state>
+    <request name="editing" type="object({ type: string, sessionId: string, value?: string, leaveId?: string, choice?: string })" returns="boolean">Submit an intent to the owning editing model. True means the owner accepted the current session handle.</request>
+  </defs>
+  <div>
+    <ui-stack from:gap="{ system: 'm', compact: 's', comfortable: 'l' }[$view.appearance.spacing]">
+      <ui-form-field>
+        <label slot="label" from:for="$view.field.id">{$view.field.label}</label>
+        <div from:data-typography="$view.appearance.typography" style:font-family="$view.appearance.typography = 'serif' ? 'ui-serif, Georgia, serif' : null"><ui-textarea from:id="$view.field.id" from:value="$view.value" from:placeholder="$view.field.placeholder" from:readonly="not $available or not $view.active" from:data-editor-session="$view.sessionId" rows="6"></ui-textarea></div>
+      </ui-form-field>
+      <p $if="not $available">{$unavailable}</p>
+      <p $if="$problem" role="alert">{$problem}</p>
+      <ui-action-bar>
+        <output slot="tertiary" aria-live="polite" from:data-status="$view.status.kind">{$view.status.text}</output>
+        <ui-button slot="primary" variant="solid" tone="accent" from:shape="{ system: 'rounded', round: 'pill' }[$view.appearance.action]" data-editor-intent="save" from:data-editor-session="$view.sessionId" from:data-editor-action="$view.save.id" from:disabled="not $available or (not $view.save.enabled and not $view.save.pending)" from:loading="$view.save.pending">{$view.save.label}</ui-button>
+      </ui-action-bar>
+    </ui-stack>
+    <ui-dialog $if="$view.leave and $available" alert open closedby="none" size="lg" from:label="$view.leave.title">
+      <p>{$view.leave.message}</p>
+      <ui-action-bar slot="actions">
+        <ui-button slot="tertiary" variant="ghost" tone="danger" data-editor-intent="choose-leave" from:data-editor-leave="$view.leave.id" data-editor-choice="discard" from:data-editor-session="$view.sessionId" from:data-editor-action="$view.leave.discard.id" from:disabled="not $view.leave.discard.enabled">{$view.leave.discard.label}</ui-button>
+        <ui-button slot="secondary" tone="neutral" autofocus data-editor-intent="choose-leave" from:data-editor-leave="$view.leave.id" data-editor-choice="stay" from:data-editor-session="$view.sessionId" from:data-editor-action="$view.leave.stay.id" from:disabled="not $view.leave.stay.enabled">{$view.leave.stay.label}</ui-button>
+        <ui-button slot="primary" variant="solid" tone="accent" data-editor-intent="choose-leave" from:data-editor-leave="$view.leave.id" data-editor-choice="save" from:data-editor-session="$view.sessionId" from:data-editor-action="$view.leave.save.id" from:disabled="not $view.leave.save.enabled and not $view.leave.save.pending" from:loading="$view.leave.save.pending">{$view.leave.save.label}</ui-button>
+      </ui-action-bar>
+    </ui-dialog>
+  </div>
+  <style>
+    :host { color: var(--ui-text-primary); background: var(--ui-surface); }
+  </style>
+</template>

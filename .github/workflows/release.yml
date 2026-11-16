@@ -52,3 +52,36 @@ jobs:
             exit 0
           fi
           npm publish --access public --tag latest --provenance
+
+  publish-system-ui:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm install --global --ignore-scripts --force corepack@0.34.7 npm@11.6.2
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build && pnpm --filter @threadlabs/system-ui build
+      - name: Publish the System UI alpha through npm trusted publishing
+        run: |
+          version=$(node -p 'require("./packages/system-ui/package.json").version')
+          if npm view "@threadlabs/system-ui@$version" version >/dev/null 2>&1; then
+            echo "@threadlabs/system-ui@$version is already published."
+            exit 0
+          fi
+          if ! npm view @threadlabs/system-ui name >/dev/null 2>&1; then
+            echo "::warning::@threadlabs/system-ui has never been published. Publish it once by hand and add this workflow as its trusted publisher."
+            exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/system-ui-release"
+          pnpm -C packages/system-ui pack --pack-destination "$RUNNER_TEMP/system-ui-release"
+          npm publish "$RUNNER_TEMP/system-ui-release/threadlabs-system-ui-$version.tgz" --access public --tag alpha --provenance

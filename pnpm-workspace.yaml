@@ -1,4 +1,7 @@
+packages:
+  - packages/*
 minimumReleaseAge: 1440
+# First-party releases are qualified here immediately after publication.
 minimumReleaseAgeExclude:
   - '@nextwebwg/html-next@1.0.0-alpha.87'
   - '@nextwebwg/html-next@1.0.0-alpha.71'

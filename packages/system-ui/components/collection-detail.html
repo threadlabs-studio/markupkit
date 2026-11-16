@@ -1,0 +1,24 @@
+<template component="mk-collection-detail">
+  <defs>
+    <prop name="active" type="keyword" values="collection, detail" default="collection">The committed region shown when only one pane fits. Does not request navigation.</prop>
+  </defs>
+  <div>
+    <div class="panes">
+      <div class="collection"><slot name="collection"></slot></div>
+      <div class="detail"><slot name="detail"></slot></div>
+    </div>
+  </div>
+  <style>
+    /* Query the allocation, not the device. Both outlets keep their content mounted. */
+    :host { container: mk-collection-detail / inline-size; min-inline-size: 0; }
+    .panes { display: grid; gap: var(--ui-space-5, 1.5rem); }
+    .collection, .detail { min-inline-size: 0; }
+    :host([active="detail"]) .collection { display: none; }
+    :host(:not([active="detail"])) .detail { display: none; }
+    @container mk-collection-detail (min-width: 48rem) {
+      .panes { grid-template-columns: minmax(12rem, 1fr) minmax(0, 2fr); }
+      :host([active="detail"]) .collection, :host(:not([active="detail"])) .detail { display: block; }
+    }
+    :host[hidden] { display: none; }
+  </style>
+</template>

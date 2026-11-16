@@ -1,6 +1,6 @@
 {
   "name": "create-markupkit",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Create a MarkupKit application: npm create markupkit@latest my-app",
   "license": "MIT",
   "type": "module",

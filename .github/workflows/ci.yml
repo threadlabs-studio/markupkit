@@ -73,3 +73,33 @@ jobs:
       - working-directory: ${{ runner.temp }}/consumer
         # Node builds the application whose server entry Deno and Bun then run.
         run: node runtime-smoke.mjs && deno run -A runtime-smoke.mjs && bun runtime-smoke.mjs
+
+  system-ui-browser:
+    runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","Linux","X64","minipc-isolated"]' || '["ubuntu-latest"]') }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm install --global --ignore-scripts --force corepack@0.34.7
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build && pnpm --filter @threadlabs/system-ui build
+      - run: pnpm --filter @threadlabs/system-ui test:browser --testNamePattern chromium
+
+  system-ui-native:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm install --global --ignore-scripts --force corepack@0.34.7
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @threadlabs/system-ui test:native

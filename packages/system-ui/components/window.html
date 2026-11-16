@@ -1,0 +1,21 @@
+<template component="system-window">
+  <defs>
+    <prop name="appearance" type="keyword" values="system, light, dark" default="system">Color scheme for this window.</prop>
+  </defs>
+  <div>
+    <slot></slot>
+  </div>
+  <style>
+    :host {
+      display: block;
+      min-block-size: 100dvb;
+      color-scheme: light dark;
+      color: CanvasText;
+      background: Canvas;
+      font-family: system-ui, sans-serif;
+    }
+
+    :host([appearance="light"]) { color-scheme: light; }
+    :host([appearance="dark"]) { color-scheme: dark; }
+  </style>
+</template>
