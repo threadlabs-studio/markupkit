@@ -1,6 +1,10 @@
 # System UI
 
-System UI is an HTML Next component library for MarkupKit websites and MarkupNative apps. Both use the same component imports and slots. The window surface follows the system font and color scheme by default. Controls use Looma and follow platform conventions for placement, keyboard input, and focus. An application can opt into a native presenter where it needs a platform view.
+System UI adapts a selected Looma theme for the target operating system and OS version. Looma uses the resulting public token values to style its controls. System UI also supplies the HTML Next components needed for MarkupKit and MarkupNative application composition, such as a shared application window. MarkupKit websites and MarkupNative apps can use the same HTML Next declarations and slots.
+
+Reusable controls and editor capabilities belong in Looma. When a Looma control cannot match macOS or Windows conventions through System UI token CSS, extend Looma with the missing token, styling hook, control, or behavior. System UI supplies the platform-specific values for Looma’s supported tokens. For the manuscript editor, that includes reusable typography and paragraph controls, caret and tracked-range geometry, selection and scroll behavior, and accessibility. The application composes the manuscript page and navigation, and owns source versions and draft persistence.
+
+MarkupNative substitutes OS-level presenters for selected HTML Next components. A substitution implements the component's existing contract, including its interaction and accessibility semantics. The app host provides windows, WebView, persistence and other services. It owns the choice of which components to substitute on each platform.
 
 ```html
 <link rel="component" href="@threadlabs/system-ui/components/window.html">
@@ -14,11 +18,37 @@ The portable root entry has no runtime dependencies or browser/native globals. I
 - @threadlabs/system-ui: portable models, view projections and theme resolution.
 - @threadlabs/system-ui/web: scoped Looma themes and text-editor binding.
 - @threadlabs/system-ui/markupkit: editing integration with MarkupKit page departure.
-- @threadlabs/system-ui/components/* and /web.css: selected component resources and Looma styles.
+- @threadlabs/system-ui/components/* and /web.css: framework component resources and shared Looma styles.
 - @threadlabs/system-ui/native: explicit checked component registrations and presenter source URLs for build tools.
 - @threadlabs/system-ui/native/*: owning Apple and experimental Android presenter sources.
 
-The web entry does not import the MarkupKit adapter. Generic experimental native inventory belongs to the separate `@threadlabs/markupnative` development package; general app generation remains incomplete.
+The web and MarkupKit entries expose separate integrations.
+
+## Adapt a Looma theme to a platform
+
+Start with the selected Looma base theme. Inherit its colors, typography,
+spacing, and other public tokens wherever they already suit the target. Apply
+targeted adjustments only to the tokens that need to change for the operating
+system or version. Where a role needs adaptation, derive its value from the
+base token when that preserves the theme and the platform behavior. Compare
+two distinct base themes under the same profile. Check light and dark modes
+and respect forced colors and reduced motion. An OS version without its own
+adjustment can use the generic OS adjustments. If the OS has no adjustments,
+the base theme still applies.
+
+Load base token CSS before the scoped platform overrides. CSS inheritance is
+enough when the platform can set the public Looma token directly. If a platform
+value needs to be mapped or a value needs to be derived from the base theme, an
+optional translation layer can resolve those specific tokens before the same
+theme is consumed by the controls. The platform layer keeps omitted values
+inherited. Add a new token or styling hook in Looma when a control exposes no
+way to make the adjustment.
+
+The current `web.css` imports Looma's base token, light, and dark styles.
+`resolveSystemTheme` merges an explicit parent preference set with a scoped
+override. `createWebThemeScope` uses it to write accent, accent foreground,
+and reduced-motion values while reacting to browser appearance preferences.
+The CSS cascade provides inheritance for the remaining tokens.
 
 Owning model, component, browser and native checks live here. Native source/protocol compilation: pnpm --filter @threadlabs/system-ui test:native. UI fixture generation: ruby packages/system-ui/tests/native-ui/project.rb /tmp/system-ui-input input. The MarkupKit integration test drives the owning page-departure transport; shipped code uses only the public navigation entry, and packed/browser consumers verify those public boundaries.
 
@@ -28,13 +58,18 @@ The Android source setup is documented in [native/android/README.md](native/andr
 
 ## Select native presentation
 
-System UI follows the host platform's visual and interaction conventions. Each
-presenter can use an OS widget or draw the control when the presentation needs
-more flexibility. Drawn controls keep the platform's keyboard, focus,
-accessibility and state behavior. Qualify those details on each target.
+MarkupNative applies native registrations when the host selects an OS-level
+presenter for an HTML Next component. A presenter may use an OS widget or draw
+controls to match platform conventions. Both approaches preserve the component's
+keyboard, focus, accessibility and state behavior. Qualify those details on each target.
 
-Applications can supply resolved Looma colors to macOS presenters through
-`SystemLoomaPalette.swift`. Pass a JSON object with `light` and `dark` maps of
+Select substitutions by component and target. Moving a floating dialog beyond
+the app frame can motivate choosing a native modal presenter for that component.
+Each dialog instance on the target uses the same presenter and creation path.
+The draggable setting controls movement for that instance.
+
+Applications can supply the same resolved Looma colors, including selected
+platform adjustments, to macOS presenters through `SystemLoomaPalette.swift`. Pass a JSON object with `light` and `dark` maps of
 public Looma token names to opaque sRGB hex colors. The host supplies the
 effective scheme and a platform fallback per role. The presenter chooses how
 each role applies to its control. Use the same resolved values for corresponding
@@ -48,7 +83,7 @@ import { systemUINativeBindings } from "@threadlabs/system-ui/native";
 const bindings = [...customBindings, ...systemUINativeBindings()];
 ```
 
-Each record contains a canonical component `definition` URL, a pinned `contractRevision`, target implementation identifiers and per-target `sources` URLs. The separate experimental MarkupNative inventory accepts these records structurally; System UI imports no native generator. The registration entry can be loaded without MarkupKit, HTML Next or Looma installed. Neither the portable nor web entry imports it. Select individual records when only some controls are needed.
+Each record contains a canonical component `definition` URL, a pinned `contractRevision`, target implementation identifiers and per-target `sources` URLs. MarkupNative uses those records to match a selected component with its presenter. The registration entry is separately importable from the portable and web entries.
 
 A build that stages source resources can pass `systemUINativeBindings(resolveResource)`, where the resolver maps exported package resource specifiers to their canonical staged URLs. The resolver does not calculate or approve new interface revisions. Changed component interfaces must still pass the owning native qualification and update the package's pins; ordinary application builds never refresh them.
 
